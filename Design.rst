@@ -40,7 +40,7 @@ the job of the RE code to take the *raw* interrupt events:
 
 +--------------+------------+
 | Action       | Event      |
-+:=============+:===========+
+|:=============|:===========|
 | Rotate left  | re_RLeft   |
 +--------------+------------+
 | Rotate right | re_RRight  |
