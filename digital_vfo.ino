@@ -42,6 +42,7 @@ static int re_pinPush = 4;  // encoder pushbutton pin
 // address in display CGRAM for definable characters
 #define SELECT_CHAR     0   // shows 'underlined' decimal digits (dynamic, 0 to 9)
 #define SPACE_CHAR      1   // shows an 'underlined' space character
+# FIXME use only one CGRAM character for 0 to 9 AND space
 
 // define the numeric digits and space with selection underline
 byte sel0[8] = {0xe,0x11,0x13,0x15,0x19,0x11,0xe,0x1f};
