@@ -39,7 +39,7 @@ The code handling the rotary encoder (RE) is entirely interrupt drive.  It is
 the job of the RE code to take the *raw* interrupt events:
 
 +--------------+------------+
-| Action       | Event      |
+| Action       | RE Event   |
 +==============+============+
 | Rotate left  | re_RLeft   |
 +--------------+------------+
