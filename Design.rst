@@ -12,7 +12,7 @@ will process the events.  Events will be byte numeric values and will be::
     2	vfo_RRight event
     3	vfo_DnRLeft event
     4	vfo_DnRRight event
-    5	vfo_PushClick event
+    5	vfo_Click event
     6	vfo_HoldClick event
 
 There will be two functions to push/pop events onto and off the queue::
@@ -36,22 +36,31 @@ The Rotary Encoder code
 -----------------------
 
 The rotary encode (RE) is entirely interrupt drive.  It is the job of the RE
-code to take the *raw* interrupt events::
+code to take the *raw* interrupt events:
 
-    Rotate left		re_RLeft
-    Rotate right	re_RRight
-    Knob down		re_Up
-    Knob up		re_Down
++--------------+------------+
+| Rotate left  | re_RLeft   |
+| Rotate right | re_RRight  |
+| Knob down    | re_Up      |
+| Knob up      | re_Down    |
++--------------+------------+
 
 and convert them into the system events shown above.  The mapping is:
 
-+-----------+------------------------------------------------------------------+
-| re_RLeft  | If knob is up -> vfo_RLeft, if down -> vfo_DnRLeft.              |
-+-----------+------------------------------------------------------------------+
-| re_RRight | If knob is up -> vfo_RRight, if down -> vfo_DnRRight.            |
-+-----------+------------------------------------------------------------------+
-| re_Down   | Mark DOWN and take note of the current millisecond value.        |
-+-----------+------------------------------------------------------------------+
-| re_Up     | If elapsed time is short -> vfo_Click, else -> vfo_Hold.         |
-|           | If there was any rotation while down no event posted.            |
-+-----------+------------------------------------------------------------------+
++-----------+------------------------------------------------------------------------------+
+| re_RLeft  | If knob is up -> vfo_RLeft, if down -> vfo_DnRLeft.                          |
++-----------+------------------------------------------------------------------------------+
+| re_RRight | If knob is up -> vfo_RRight, if down -> vfo_DnRRight.                        |
++-----------+------------------------------------------------------------------------------+
+| re_Down   | Set internal state to 'down' and take note of the current millisecond value. |
++-----------+------------------------------------------------------------------------------+
+| re_Up     | If elapsed 'down' time is short -> vfo_Click, else -> vfo_HoldClick.         |
+|           | If there was any rotation while down no event posted.                        |
++-----------+------------------------------------------------------------------------------+
+
+The above shows that the RE code must have these state variables::
+
+    rotation	if true rotation occurred while knob was down
+    down_time	time when the knob was pressed
+    down	true if the knob is down
+
