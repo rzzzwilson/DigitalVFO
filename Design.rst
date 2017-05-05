@@ -5,23 +5,33 @@ Event Queue
 -----------
 
 At the heart of the VFO software is the *event queue*.  The *loop()* function
-will process the events.  Events will be byte numeric values and will be::
+will process the events.  Events will be byte numeric values and will be:
 
-    0	vfo_None event
-    1	vfo_RLeft event
-    2	vfo_RRight event
-    3	vfo_DnRLeft event
-    4	vfo_DnRRight event
-    5	vfo_Click event
-    6	vfo_HoldClick event
++-------+---------------------+
+| Value | Name                |
++=======+=====================+
+|   0	| vfo_None event      |
++-------+---------------------+
+|   1	| vfo_RLeft event     |
++-------+---------------------+
+|   2	| vfo_RRight event    |
++-------+---------------------+
+|   3	| vfo_DnRLeft event   |
++-------+---------------------+
+|   4	| vfo_DnRRight event  |
++-------+---------------------+
+|   5	| vfo_Click event     |
++-------+---------------------+
+|   6	| vfo_HoldClick event |
++-------+---------------------+
 
 There will be two functions to push/pop events onto and off the queue::
 
     push_queue(event);
     event = pop_queue();
 
-Note that the code will never **push** a *vfo_None* event onto the queue.  The
-*pop_queue()* function will return a *vfo_None* event if the queue is empty.
+Note that the RE code will never **push** a *vfo_None* event onto the queue.
+The *pop_queue()* function will return a *vfo_None* event if the queue is empty.
 
 The queue will be implemented as a circular buffer with length of about
 10 events.  Note that the *pop_queue()* function *must* be thread safe.
