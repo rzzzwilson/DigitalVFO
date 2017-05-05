@@ -22,7 +22,7 @@ The modern way to accurately generate an RF signal is to use the AD9850 DDS chip
 which digitally generates a known frequency from a crystal source.  One nice
 piece of kit is the 
 `DDS-60 daughterboard <http://midnightdesignsolutions.com/dds60/>`_
-from `Midnight Design Solutions <http://midnightdesignsolutions.com/>`_ .
+from `Midnight Design Solutions <http://midnightdesignsolutions.com/>`_.
 All I need to do is use a microcontroller to control the DDS-60!
 
 The obvious solution is to use an Arduino and the ubiquitous 16x2 display.
@@ -36,7 +36,7 @@ Interface
 
 I don't need a lot of functionality in this VFO, I just want:
 
-* Able to set a frequency from 1.000000Mz to 30.000000MHz with 1Hz step
+* Able to set a frequency from 1.000000Mz to 30.000000MHz with steps down to 1Hz
 * Able to save and restore a number of frequencies
 
 It should be possible to do all this with an interface made up of:
