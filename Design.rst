@@ -40,7 +40,7 @@ the job of the RE code to take the *raw* interrupt events:
 
 +--------------+------------+
 | Action       | Event      |
-|:=============|:===========|
++==============+============+
 | Rotate left  | re_RLeft   |
 +--------------+------------+
 | Rotate right | re_RRight  |
@@ -53,7 +53,7 @@ the job of the RE code to take the *raw* interrupt events:
 and convert them into the system queue events shown above.  The mapping is:
 
 +-----------+------------------------------------------------------------------------------+
-|RE Event   |System Event                                                                  |
+| RE Event  | System Event                                                                 |
 +===========+==============================================================================+
 | re_RLeft  | If knob is up -> vfo_RLeft, if down -> vfo_DnRLeft.                          |
 +-----------+------------------------------------------------------------------------------+
