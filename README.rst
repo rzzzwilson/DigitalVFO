@@ -14,7 +14,7 @@ About
 I'm an amateur radio operator, but since I'm not in the country in which I
 earned my licence I can't actually build or operate a transmitter, so I build
 receivers and test gear.  I'm working on being able to operate from my
-countyr of residence, but that's another story.
+country of residence, but that's another story.
 
 One piece of test gear that would be useful is called a Signal Generator.  This
 is a piece of kit that generates a radio signal of a known frequency.  It can
