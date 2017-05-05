@@ -35,19 +35,23 @@ The defined events will be byte values with the numeric values shown above.
 The Rotary Encoder code
 -----------------------
 
-The rotary encode (RE) is entirely interrupt drive.  It is the job of the RE
-code to take the *raw* interrupt events:
+The code handling the rotary encoder (RE) is entirely interrupt drive.  It is
+the job of the RE code to take the *raw* interrupt events:
 
 +--------------+------------+
+| Action       | Event      |
++==============+============+
 | Rotate left  | re_RLeft   |
 | Rotate right | re_RRight  |
 | Knob down    | re_Up      |
 | Knob up      | re_Down    |
 +--------------+------------+
 
-and convert them into the system events shown above.  The mapping is:
+and convert them into the system queue events shown above.  The mapping is:
 
 +-----------+------------------------------------------------------------------------------+
+| RE Event  | System Event                                                                 |
++===========+==============================================================================+
 | re_RLeft  | If knob is up -> vfo_RLeft, if down -> vfo_DnRLeft.                          |
 +-----------+------------------------------------------------------------------------------+
 | re_RRight | If knob is up -> vfo_RRight, if down -> vfo_DnRRight.                        |
