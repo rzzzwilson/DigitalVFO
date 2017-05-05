@@ -5,7 +5,8 @@ Status
 ======
 
 The code now allows selection of frequency in the manner designed, and the
-frequency and selected digit are restored on power-up.
+frequency and selected digit are restored on power-up.  Next, add in the DDS-60
+control code.
 
 About
 -----
