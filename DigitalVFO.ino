@@ -42,7 +42,7 @@ static int re_pinPush = 4;  // encoder pushbutton pin
 // address in display CGRAM for definable characters
 #define SELECT_CHAR     0   // shows 'underlined' decimal digits (dynamic, 0 to 9)
 #define SPACE_CHAR      1   // shows an 'underlined' space character
-# FIXME use only one CGRAM character for 0 to 9 AND space
+// FIXME use only one CGRAM character for 0 to 9 AND space
 
 // define the numeric digits and space with selection underline
 byte sel0[8] = {0xe,0x11,0x13,0x15,0x19,0x11,0xe,0x1f};
@@ -78,6 +78,15 @@ volatile byte encoderCount = 0;
 // define the display connections
 LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 
+// define the VFOevents
+#define vfo_None      0
+#define vfo_RLeft     1
+#define vfo_RRight    2
+#define vfo_DnRLeft   3
+#define vfo_DnRRight  4
+#define vfo_Click     5
+#define vfo_HoldClick 6
+
 // old values of 're_delta' and 're_position'
 int oldEncOffset = 1;
 byte oldEncPos = 180;
@@ -90,6 +99,58 @@ byte oldEncPos = 180;
 unsigned long VfoFrequency;   // VFO frequency (Hz)
 int VfoSelectDigit;           // selected digit, indexed from zero at right
 
+
+////////////////////////////////////////////////////////////////////////////////
+// The system queue.
+// Implemented as a circular buffer.
+////////////////////////////////////////////////////////////////////////////////
+
+#define QueueLength 10
+
+byte event_queue[QueueLength];
+int queue_fore = 0;   // fore pointer into circular buffer
+int queue_aft = 0;    // aft pointer into circular buffer
+
+bool queue_empty()
+{
+  return (queue_fore == queue_aft);
+}
+
+void push_queue(byte event)
+{
+  event_queue[queue_fore++] = event;
+  if (queue_fore >= QueueLength)
+    queue_fore = 0;
+  if (queue_fore == queue_aft)
+      Serial.println("ERROR: event queue full!?");
+}
+
+int pop_queue()
+{
+  if (queue_fore == queue_aft)
+    return vfo_None;
+
+  byte event = event_queue[queue_aft++];
+
+  if (queue_aft  >= QueueLength)
+    queue_aft = 0;
+
+  return event;
+}
+
+#ifdef DEBUG
+void dump_queue()
+{
+  Serial.print("Queue:");
+  for (int i = 0; i < QueueLength; ++i)
+  {
+    Serial.print(" "); Serial.print(event_queue[i]);
+  }
+  Serial.println("");
+  Serial.print("queue_aft="); Serial.print(queue_aft);
+  Serial.print(", queue_fore="); Serial.println(queue_fore);
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Utility routines for the display.
@@ -166,14 +227,13 @@ void print_freq(unsigned long freq, int col)
 // Interrupt driven rotary encoder interface.
 ////////////////////////////////////////////////////////////////////////////////
 
-// states for the encode machine
-static int re_stateUp = 0;
-static int re_stateDown = 1;
-volatile int re_state = 0;
+// time when click becomes a "hold click" (milliseconds)
+#define HoldClickTime 2000
 
-////////////////////////////
-// internal state variables
-////////////////////////////
+// internal variables
+bool re_rotation = false;       // true if rotation occurred while knob down
+bool re_down = false;           // true while knob is down
+unsigned long re_down_time = 0; // milliseconds when knob is pressed down
 
 // expecting rising edge on pinA - at detent
 volatile byte aFlag = 0;
@@ -183,10 +243,7 @@ volatile byte bFlag = 0;
 
 // this variable stores our current value of encoder position.
 // Change to int or uin16_t instead of byte if you want to record a larger range than 0-255
-volatile long re_delta = 0;
-
-// stores latest offset value
-volatile int re_position = 0;
+//volatile long re_delta = 0;
 
 //----------------------------------------------------------
 // Setup the encoder stuff, pins, etc.
@@ -206,38 +263,31 @@ void re_setup(int position)
   attachInterrupt(digitalPinToInterrupt(re_pinA), pinA_isr, RISING);
   attachInterrupt(digitalPinToInterrupt(re_pinB), pinB_isr, RISING);
   attachInterrupt(digitalPinToInterrupt(re_pinPush), pinPush_isr, CHANGE);
-
-  // start at given select digit position
-  re_position = position;
-}
-
-void bump_encoder_posn(long bump)
-{
-  if (re_state == re_stateUp)
-  {
-    re_delta += bump * offset2bump[re_position];
-  }
-  else if (re_state == re_stateDown)
-  {
-    re_position -= bump;
-    if (re_position < 0)
-      re_position = 0;
-    if (re_position > 7)
-      re_position = 7;
-  }
 }
 
 void pinPush_isr()
 {
-  // stop interrupts, read Push pin, restore interrupts
-  byte reading;
-
   cli();
-    reading = PIND & 0x10;
-    if (reading)
-      re_state = re_stateUp;
+    re_down = ! (PIND & 0x10);
+    if (re_down)
+    {
+      // button pushed down
+      re_rotation = false;      // no rotation while down so far
+      re_down_time = millis();  // note time we went down
+    }
     else
-      re_state = re_stateDown;
+    {
+      // button released, check if rotation, UP event if not
+      if (! re_rotation)
+      {
+        unsigned long push_time = millis() - re_down_time;
+
+        if (push_time < HoldClickTime)
+          push_queue(vfo_Click);
+        else
+          push_queue(vfo_HoldClick);
+      }
+    }
   sei();
 }
 
@@ -252,7 +302,15 @@ void pinA_isr()
     if (reading == B00001100 && aFlag)
     { // check that we have both pins at detent (HIGH) and that we are expecting detent on
       // this pin's rising edge
-      bump_encoder_posn(-1);
+      if (re_down)
+      {
+        push_queue(vfo_DnRLeft);
+        re_rotation = true;
+      }
+      else
+      {
+        push_queue(vfo_RLeft);
+      }
       bFlag = 0; //reset flags for the next turn
       aFlag = 0; //reset flags for the next turn
     }
@@ -268,18 +326,24 @@ void pinB_isr()
   byte reading;
 
   cli();
-  reading = PIND & 0xC;
-  
-  if (reading == B00001100 && bFlag)
-  { // check that we have both pins at detent (HIGH) and that we are expecting detent on
-    // this pin's rising edge
-    bump_encoder_posn(+1);
-    bFlag = 0; //reset flags for the next turn
-    aFlag = 0; //reset flags for the next turn
-  }
-  else if (reading == B00001000)
-    // show we're expecting pinA to signal the transition to detent from free rotation
-    aFlag = 1;
+    reading = PIND & 0xC;
+    
+    if (reading == B00001100 && bFlag)
+    { // check that we have both pins at detent (HIGH) and that we are expecting detent on
+      // this pin's rising edge
+      if (re_down)
+      {
+        push_queue(vfo_DnRRight);
+        re_rotation = true;
+      }
+      else
+        push_queue(vfo_RRight);
+      bFlag = 0; //reset flags for the next turn
+      aFlag = 0; //reset flags for the next turn
+    }
+    else if (reading == B00001000)
+      // show we're expecting pinA to signal the transition to detent from free rotation
+      aFlag = 1;
   sei();
 }
 
@@ -341,34 +405,65 @@ void setup()
 //------------------------------------------------------------------------------
 void loop()
 {
-  static unsigned long old_freq = 0L;
-  static int old_position = -1;
-  
-  long copy_re_delta;
-  
-  // do an atomic copy/reset of the volatile RE state variables
-  cli();
-    copy_re_delta = re_delta;
-    VfoSelectDigit = re_position;
-    re_delta = 0L;
-  sei();
+  unsigned long old_freq = 0;
+  int old_position = -1;
 
-  // calculate new frequency, limit if required
-  VfoFrequency += copy_re_delta;
-  if (VfoFrequency > MAX_FREQ)
-    VfoFrequency = MAX_FREQ;
-  if (VfoFrequency < MIN_FREQ)
-    VfoFrequency = MIN_FREQ;
+      print_freq(VfoFrequency, VfoSelectDigit);
+      old_freq = VfoFrequency;
+      old_position = VfoSelectDigit;
 
-  // display frequency if changed, update DDS-60
-  if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
+  while (!queue_empty())
   {
-    print_freq(VfoFrequency, VfoSelectDigit);
-    old_freq = VfoFrequency;
-    old_position = VfoSelectDigit;
+    // get next event and handle it
+    byte event = pop_queue();
 
-    save_to_eeprom();
+    switch (event)
+    {
+      case vfo_RLeft:
+        Serial.println("vfo_RLeft");
+        VfoFrequency -= offset2bump[VfoSelectDigit];
+        if (VfoFrequency < MIN_FREQ)
+          VfoFrequency = MIN_FREQ;
+        break;
+      case vfo_RRight:
+        Serial.println("vfo_RRight");
+        VfoFrequency += offset2bump[VfoSelectDigit];
+        if (VfoFrequency > MAX_FREQ)
+          VfoFrequency = MAX_FREQ;
+        break;
+      case vfo_DnRLeft:
+        Serial.println("vfo_DnRLeft");
+        VfoSelectDigit += 1;
+        if (VfoSelectDigit >= MAX_FREQ_CHARS)
+          VfoSelectDigit = MAX_FREQ_CHARS - 1;
+        break;
+      case vfo_DnRRight:
+        Serial.println("vfo_DnRRight");
+        VfoSelectDigit -= 1;
+        if (VfoSelectDigit < 0)
+          VfoSelectDigit = 0;
+        break;
+      case vfo_Click:
+        Serial.println("vfo_Click event ignored");
+        break;
+      case vfo_HoldClick:
+        Serial.println("vfo_HoldClick event ignored");
+        break;
+      default:
+        Serial.print("Unrecognized event: "); Serial.println(event);
+        break;
+    }
     
-    update_dds60(VfoFrequency);
+    // display frequency if changed, update DDS-60
+    if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
+    {
+      print_freq(VfoFrequency, VfoSelectDigit);
+      old_freq = VfoFrequency;
+      old_position = VfoSelectDigit;
+  
+      save_to_eeprom();
+      
+      update_dds60(VfoFrequency);
+    }
   }
 }
