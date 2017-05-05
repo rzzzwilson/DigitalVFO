@@ -28,7 +28,8 @@ which digitally generates a known frequency from a crystal source.  There are
 quite a few people offering small boards using this chip but I like the
 `DDS-60 daughterboard <http://midnightdesignsolutions.com/dds60/>`_
 from `Midnight Design Solutions <http://midnightdesignsolutions.com/>`_.
-All I need to do is use a microcontroller to control the DDS-60!
+All I need to do is use a microcontroller to control the DDS-60 with some
+sort of frequency display!
 
 The obvious solution is to use an Arduino and the ubiquitous 16x2 display.
 Since the Arduino is a little large and I hoped to put the kit into a small
