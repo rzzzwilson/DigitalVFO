@@ -34,7 +34,7 @@ The obvious solution is to use an Arduino and the ubiquitous 16x2 display.
 Since the Arduino is a little large and I hoped to put the kit into a small
 case I decided to use a
 `Teensy microcontroller <https://www.pjrc.com/store/teensy32.html>`_
-which is programmable through the Arduino IDE.
+which is programmable through the Arduino IDE.  It's about 35mm x 18mm!
 
 I got a couple of generic 16x2 displays from
 `AliExpress <https://www.aliexpress.com/wholesale?catId=0&initiative_id=SB_20170504210259&SearchText=display+1602>`_.
