@@ -58,8 +58,17 @@ Using the above the user can move a 'column selection' indication in the
 frequency display by pressing down on the encoder knob and then rotating it.
 With the knob up, rotation just increments or decrements the
 selected digit with over- and under-flow occurring to the left of the
-selected digit.  This is pretty much they way everybody it.
+selected digit.  This is pretty much the way everybody does it.
 
-It would also be nice if the VFO remembered the frequency and selected
-digit if the power is lost and then restored.
+It would also be nice if the VFO remembered the frequency and selected digit if
+the power is lost and then restored.  Use the on-board EEPROM for this, as well
+as remembered frequencies.
 
+We may have to come up with some way of having a simple menu-driven method
+of:
+
+* Saving/restoring frequencies
+* Adjusting various internal parameters such as clock scaling, etc.
+
+We could possibly drop into the menu system if the encoder knob is held down
+for some length of time.
