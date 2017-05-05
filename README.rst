@@ -5,11 +5,14 @@ Status
 ======
 
 The code now allows selection of frequency in the manner designed, and the
-frequency and selected digit are restored on power-up.  Next, add in the DDS-60
-control code.
+frequency and selected digit are restored on power-up.  I'm a little proud
+of the way I show the selected column using a dynamically programmable
+character.  This leaves the second row free for other purposes.
+
+Next, add in the DDS-60 control code.
 
 About
------
+=====
 
 I'm an amateur radio operator, but since I'm not in the country in which I
 earned my licence I can't actually build or operate a transmitter, so I build
@@ -39,7 +42,7 @@ I got the rotary encoder from
 `the same place <https://www.aliexpress.com/wholesale?catId=0&initiative_id=AS_20170504210300&SearchText=rotary+encoder+switch>`_.
 
 Interface
----------
+=========
 
 I don't need a lot of functionality in this VFO, I just want:
 
@@ -49,13 +52,13 @@ I don't need a lot of functionality in this VFO, I just want:
 It should be possible to do all this with an interface made up of:
 
 * A 16x2 display, and
-* A rotary encode, with switch.
+* A rotary encoder, with switch.
 
 Using the above the user can move a 'column selection' indication in the
-frequency display by pressing down on the encode knob and rotating the 
-knob.  With the knob up rotation just increments or decrements the
+frequency display by pressing down on the encoder knob and then rotating it.
+With the knob up, rotation just increments or decrements the
 selected digit with over- and under-flow occurring to the left of the
-selected digit.
+selected digit.  This is pretty much they way everybody it.
 
 It would also be nice if the VFO remembered the frequency and selected
 digit if the power is lost and then restored.
