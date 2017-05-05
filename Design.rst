@@ -7,23 +7,23 @@ Event Queue
 At the heart of the VFO software is the *event queue*.  The *loop()* function
 will process the events.  Events will be byte numeric values and will be:
 
-+-------+---------------------+
-| Value | Name                |
-+=======+=====================+
-|   0	| vfo_None event      |
-+-------+---------------------+
-|   1	| vfo_RLeft event     |
-+-------+---------------------+
-|   2	| vfo_RRight event    |
-+-------+---------------------+
-|   3	| vfo_DnRLeft event   |
-+-------+---------------------+
-|   4	| vfo_DnRRight event  |
-+-------+---------------------+
-|   5	| vfo_Click event     |
-+-------+---------------------+
-|   6	| vfo_HoldClick event |
-+-------+---------------------+
++-------+---------------+
+| Value | Event Name    |
++=======+===============+
+|   0	| vfo_None      |
++-------+---------------+
+|   1	| vfo_RLeft     |
++-------+---------------+
+|   2	| vfo_RRight    |
++-------+---------------+
+|   3	| vfo_DnRLeft   |
++-------+---------------+
+|   4	| vfo_DnRRight  |
++-------+---------------+
+|   5	| vfo_Click     |
++-------+---------------+
+|   6	| vfo_HoldClick |
++-------+---------------+
 
 There will be two functions to push/pop events onto and off the queue::
 
@@ -60,10 +60,10 @@ the job of the RE code to take the *raw* interrupt events:
 | Knob up      | re_Down    |
 +--------------+------------+
 
-and convert them into the system queue events shown above.  The mapping is:
+and convert them into the system queue events shown previously.  The mapping is:
 
 +-----------+------------------------------------------------------------------------------+
-| RE Event  | System Event                                                                 |
+| RE Event  | System Event & actions                                                       |
 +===========+==============================================================================+
 | re_RLeft  | If knob is up -> vfo_RLeft, if down -> vfo_DnRLeft.                          |
 +-----------+------------------------------------------------------------------------------+
@@ -72,10 +72,10 @@ and convert them into the system queue events shown above.  The mapping is:
 | re_Down   | Set internal state to 'down' and take note of the current millisecond value. |
 +-----------+------------------------------------------------------------------------------+
 | re_Up     | If elapsed 'down' time is short -> vfo_Click, else -> vfo_HoldClick.         |
-|           | If there was any rotation while down no event posted.                        |
+|           | If there was any rotation while down no event posted.  Clear 'down' state.   |
 +-----------+------------------------------------------------------------------------------+
 
-The above shows that the RE code must have these state variables::
+The above implies that the RE code will have these state variables::
 
     rotation	if true rotation occurred while knob was down
     down_time	time when the knob was pressed
