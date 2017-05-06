@@ -8,7 +8,7 @@ At the heart of the VFO software is the *event queue*.  The *loop()* function
 will process the events.  Events will be byte numeric values and will be:
 
 +-------+---------------+-------------------------------------------+
-| Value | Event Name    |                                           |
+| Value | Event Name    | Description                               |
 +=======+===============+===========================================+
 |   0	| vfo_None      | No event (returned if event queue empty)  |
 +-------+---------------+-------------------------------------------+
