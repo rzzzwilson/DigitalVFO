@@ -9,7 +9,10 @@ frequency and selected digit are restored on power-up.  I'm a little proud
 of the way I show the selected column using a dynamically programmable
 character.  This leaves the second row free for other purposes.
 
-Next, add in the DDS-60 control code.
+Next:
+
+* implement a menu system
+* add in the DDS-60 control code
 
 About
 =====

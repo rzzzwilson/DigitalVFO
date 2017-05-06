@@ -122,10 +122,11 @@ void push_queue(byte event)
   if (queue_fore >= QueueLength)
     queue_fore = 0;
   if (queue_fore == queue_aft)
-      Serial.println("ERROR: event queue full!?");
+      dump_queue("ERROR: event queue full:");
+      while (1);    // stop here
 }
 
-int pop_queue()
+byte pop_queue()
 {
   if (queue_fore == queue_aft)
     return vfo_None;
@@ -138,19 +139,28 @@ int pop_queue()
   return event;
 }
 
-#ifdef DEBUG
-void dump_queue()
+int queue_len()
 {
-  Serial.print("Queue:");
+  int result = queue_fore - queue_aft;
+  
+  if (result < 0)
+    result += QueueLength;
+
+  return result;
+}
+
+void dump_queue(const char *msg)
+{
+  Serial.print("Queue: "); Serial.println(msg);
   for (int i = 0; i < QueueLength; ++i)
   {
     Serial.print(" "); Serial.print(event_queue[i]);
   }
   Serial.println("");
+  Serial.print("Queue length="); Serial.println(queue_len());
   Serial.print("queue_aft="); Serial.print(queue_aft);
   Serial.print(", queue_fore="); Serial.println(queue_fore);
 }
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Utility routines for the display.
@@ -228,7 +238,7 @@ void print_freq(unsigned long freq, int col)
 ////////////////////////////////////////////////////////////////////////////////
 
 // time when click becomes a "hold click" (milliseconds)
-#define HoldClickTime 2000
+#define HoldClickTime 1000
 
 // internal variables
 bool re_rotation = false;       // true if rotation occurred while knob down
@@ -373,6 +383,53 @@ void restore_from_eeprom()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Code to handle the menus.
+////////////////////////////////////////////////////////////////////////////////
+
+const char *Menu0[] = {"Save", "Restore", "Exit"};
+
+void show_menu()
+{
+  Serial.println("show_menu()");
+
+  while (true)
+  {
+    // get next event and handle it
+    byte event = pop_queue();
+//    Serial.print("Menu: event="); Serial.println(event);
+
+    switch (event)
+    {
+      case vfo_RLeft:
+        Serial.println("Menu: vfo_RLeft");
+        break;
+      case vfo_RRight:
+        Serial.println("Menu: vfo_RRight");
+        break;
+      case vfo_DnRLeft:
+        Serial.println("Menu: vfo_DnRLeft");
+        break;
+      case vfo_DnRRight:
+        Serial.println("Menu: vfo_DnRRight");
+        break;
+      case vfo_Click:
+        Serial.println("Menu: vfo_Click");
+        break;
+      case vfo_HoldClick:
+        Serial.println("Menu: vfo_Click");
+        return;
+        break;
+      case vfo_None:
+        // ignore this as there's LOTS of them
+        break;
+      default:
+        Serial.print("Menu: unrecognized event "); Serial.println(event);
+        break;
+    }
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Code to handle the DDS-60.
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -398,6 +455,9 @@ void setup()
   
   // set up the rotary encoder
   re_setup(VfoSelectDigit);
+
+  Serial.println("Digital VFO 0.1");
+  Serial.print("Frequency="); Serial.println(VfoFrequency);
 }
 
 //------------------------------------------------------------------------------
@@ -408,14 +468,15 @@ void loop()
   unsigned long old_freq = 0;
   int old_position = -1;
 
-      print_freq(VfoFrequency, VfoSelectDigit);
-      old_freq = VfoFrequency;
-      old_position = VfoSelectDigit;
+  print_freq(VfoFrequency, VfoSelectDigit);
+  old_freq = VfoFrequency;
+  old_position = VfoSelectDigit;
 
   while (!queue_empty())
   {
     // get next event and handle it
     byte event = pop_queue();
+    Serial.print("Handling event "); Serial.println(event);
 
     switch (event)
     {
@@ -447,7 +508,9 @@ void loop()
         Serial.println("vfo_Click event ignored");
         break;
       case vfo_HoldClick:
-        Serial.println("vfo_HoldClick event ignored");
+        Serial.println("Got vfo_HoldClick: calling show_menu()");
+        show_menu();
+        Serial.println("After show_menu()");
         break;
       default:
         Serial.print("Unrecognized event: "); Serial.println(event);
@@ -457,9 +520,9 @@ void loop()
     // display frequency if changed, update DDS-60
     if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
     {
-      print_freq(VfoFrequency, VfoSelectDigit);
-      old_freq = VfoFrequency;
-      old_position = VfoSelectDigit;
+//      print_freq(VfoFrequency, VfoSelectDigit);
+//      old_freq = VfoFrequency;
+//      old_position = VfoSelectDigit;
   
       save_to_eeprom();
       
