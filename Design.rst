@@ -7,23 +7,23 @@ Event Queue
 At the heart of the VFO software is the *event queue*.  The *loop()* function
 will process the events.  Events will be byte numeric values and will be:
 
-+-------+---------------+
-| Value | Event Name    |
-+=======+===============+
-|   0	| vfo_None      |
-+-------+---------------+
-|   1	| vfo_RLeft     |
-+-------+---------------+
-|   2	| vfo_RRight    |
-+-------+---------------+
-|   3	| vfo_DnRLeft   |
-+-------+---------------+
-|   4	| vfo_DnRRight  |
-+-------+---------------+
-|   5	| vfo_Click     |
-+-------+---------------+
-|   6	| vfo_HoldClick |
-+-------+---------------+
++-------+---------------+-------------------------------------------+
+| Value | Event Name    |                                           |
++=======+===============+===========================================+
+|   0	| vfo_None      | No event (returned if event queue empty)  |
++-------+---------------+-------------------------------------------+
+|   1	| vfo_RLeft     | Simple rotation left (switch UP)          |
++-------+---------------+-------------------------------------------+
+|   2	| vfo_RRight    | Simple rotation right (switch UP)         |
++-------+---------------+-------------------------------------------+
+|   3	| vfo_DnRLeft   | Rotation left while switch DOWN           |
++-------+---------------+-------------------------------------------+
+|   4	| vfo_DnRRight  | Rotation right while switch DOWN          |
++-------+---------------+-------------------------------------------+
+|   5	| vfo_Click     | Click of the switch without rotation      |
++-------+---------------+-------------------------------------------+
+|   6	| vfo_HoldClick | Held click of the switch without rotation |
++-------+---------------+-------------------------------------------+
 
 There will be two functions to push/pop events onto and off the queue::
 
