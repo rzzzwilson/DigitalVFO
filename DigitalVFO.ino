@@ -114,7 +114,7 @@ int queue_aft = 0;    // aft pointer into circular buffer
 void push_event(byte event)
 {
   // Must protect from RE code fiddling with queue
-  noInterrupts();
+//  noInterrupts();
 
   // put new event into next empty slot
   event_queue[queue_fore] = event;
@@ -132,7 +132,7 @@ void push_event(byte event)
       while (1);    // stop here
   }
 
-  interrupts();
+//  interrupts();
 }
 
 byte pop_event(void)
