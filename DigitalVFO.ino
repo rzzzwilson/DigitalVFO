@@ -135,7 +135,7 @@ void push_event(byte event)
   interrupts();
 }
 
-byte pop_event()
+byte pop_event(void)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
@@ -157,7 +157,7 @@ byte pop_event()
   return event;
 }
 
-int queue_len()
+int queue_len(void)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
@@ -172,6 +172,11 @@ int queue_len()
   interrupts();
   
   return result;
+}
+
+void flush_queue(void)
+{
+  
 }
 
 void dump_queue(const char *msg)
@@ -221,16 +226,17 @@ void ltobbuff(char *buf, int bufsize, unsigned long value)
 
 //------------------------------------------------------------------------------
 // Print the frequency on the display with selected colum underlined.
-//     freq  the frequency to display
-//     col   the selection offset of digit to underline
-//           (0 is rightmost digit, increasing to the left)
+//     freq     the frequency to display
+//     sel_col  the selection offset of digit to underline
+//              (0 is rightmost digit, increasing to the left)
+//     row      the row to use, 0 is at top
 // The row and columns used to show frequency digits are defined elsewhere.
 // A final "Hz" is written. 
 //------------------------------------------------------------------------------
-void print_freq(unsigned long freq, int col)
+void print_freq(unsigned long freq, int sel_col, int row)
 {
   char buf [MAX_FREQ_CHARS];
-  int index = MAX_FREQ_CHARS - col - 1;
+  int index = MAX_FREQ_CHARS - sel_col - 1;
   bool lead_zero = true;
 
   ltobbuff(buf, MAX_FREQ_CHARS, freq);
@@ -305,7 +311,7 @@ void re_setup(int position)
   attachInterrupt(digitalPinToInterrupt(re_pinPush), pinPush_isr, CHANGE);
 }
 
-void pinPush_isr()
+void pinPush_isr(void)
 {
   re_down = ! (PIND & 0x10);
   if (re_down)
@@ -333,7 +339,7 @@ void pinPush_isr()
   }
 }
 
-void pinA_isr()
+void pinA_isr(void)
 {
   byte reading = PIND & 0xC;
 
@@ -359,7 +365,7 @@ void pinA_isr()
   }
 }
 
-void pinB_isr()
+void pinB_isr(void)
 {
   byte reading = PIND & 0xC;
   
@@ -397,14 +403,14 @@ static int AddressSelDigit = AddressFreq + sizeof(AddressFreq);
 
 
 // save VFO state to EEPROM
-void save_to_eeprom()
+void save_to_eeprom(void)
 {
   EEPROM.put(AddressFreq, VfoFrequency);
   EEPROM.put(AddressSelDigit, VfoSelectDigit);
 }
 
 // restore VFO state from EEPROM
-void restore_from_eeprom()
+void restore_from_eeprom(void)
 {
   EEPROM.get(AddressFreq, VfoFrequency);
   EEPROM.get(AddressSelDigit, VfoSelectDigit);
@@ -414,11 +420,26 @@ void restore_from_eeprom()
 // Code to handle the menus.
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *Menu0[] = {"Save", "Restore", "Exit"};
+typedef void (*MenuDisplay)(int slot_num);
+typedef void (*MenuAction)(int slot_num);
 
-void show_menu()
+struct Menu
 {
-  Serial.println("show_menu()");
+  const char *title;
+  int num_items;
+  MenuDisplay display;
+  MenuAction action;
+  const char **items;
+};
+
+void show_menu(struct Menu *menu)
+{
+  Serial.print("show_menu("); Serial.print(menu->title); Serial.println(")");
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write(menu->title);
+  menu->display(0);
 
   while (true)
   {
@@ -445,12 +466,9 @@ void show_menu()
           Serial.println("Menu: vfo_Click");
           continue;
         case vfo_HoldClick:
-          Serial.println("Menu: vfo_Click");
+          Serial.println("Menu: vfo_HoldClick, exit menu");
+          flush_queue();
           return;
-//          break;
-//        case vfo_None:
-//          // ignore this as there's LOTS of them
-//          break;
         default:
           Serial.print("Menu: unrecognized event "); Serial.println(event);
           continue;
@@ -472,7 +490,7 @@ void update_dds60(unsigned long freq)
 // The standard Arduino setup() function.
 //------------------------------------------------------------------------------
 
-void setup()
+void setup(void)
 {
   Serial.begin(115200);
 
@@ -489,14 +507,33 @@ void setup()
   Serial.println("Digital VFO 0.1");
   Serial.print("Frequency="); Serial.println(VfoFrequency);
 
-  print_freq(VfoFrequency, VfoSelectDigit);
+  show_main_screen();
+}
+
+void show_main_screen(void)
+{
+  lcd.clear();
+  print_freq(VfoFrequency, VfoSelectDigit, 0);  
 }
 
 //------------------------------------------------------------------------------
 // Standard Arduino loop() function.
 //------------------------------------------------------------------------------
 
-void loop()
+void item_display(int slot_num)
+{
+  Serial.print("item_display: slot_num="); Serial.println(slot_num);
+}
+
+void item_action(int slot_num)
+{
+  
+}
+
+const char *main_menu_items[2] = {"Save", "Restore"};
+Menu main_menu = {"Menu", 2, item_display, item_action, main_menu_items};
+
+void loop(void)
 {
   // remember old values, update screen if changed
   unsigned long old_freq = VfoFrequency;
@@ -539,8 +576,10 @@ void loop()
         break;
       case vfo_HoldClick:
         Serial.println("Got vfo_HoldClick: calling show_menu()");
-        show_menu();
-        Serial.println("After show_menu()");
+        show_menu(&main_menu);
+//        Serial.println("After show_menu()");
+        dump_queue("After show_menu()");
+        show_main_screen();
         break;
       default:
         Serial.print("Unrecognized event: "); Serial.println(event);
@@ -550,7 +589,7 @@ void loop()
     // display frequency if changed, update DDS-60
     if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
     {
-      print_freq(VfoFrequency, VfoSelectDigit);
+      print_freq(VfoFrequency, VfoSelectDigit, 0);
       old_freq = VfoFrequency;
       old_position = VfoSelectDigit;
   
