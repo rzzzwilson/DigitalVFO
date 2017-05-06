@@ -27,15 +27,15 @@ will process the events.  Events will be byte numeric values and will be:
 
 There will be two functions to push/pop events onto and off the queue::
 
-    push_queue(event);
-    event = pop_queue();
+    push_event(event);
+    event = pop_event();
 
 Note that the RE code will never **push** a *vfo_None* event onto the queue.
-The *pop_queue()* function will return a *vfo_None* event if the queue is empty.
+The *pop_event()* function will return a *vfo_None* event if the queue is empty.
 
 The queue will be implemented as a circular buffer with length of about
-10 events.  Note that the *pop_queue()* function *must* be thread safe.
-The *push_queue()* function runs in the interrupt handler so is safe.
+10 events.  Note that the *pop_event()* function *must* be thread safe.
+The *push_event()* function runs in the interrupt handler so is safe.
 
 Events
 ------
