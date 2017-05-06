@@ -9,10 +9,19 @@ frequency and selected digit are restored on power-up.  I'm a little proud
 of the way I show the selected column using a dynamically programmable
 character.  This leaves the second row free for other purposes.
 
-Next:
+Completed:
 
-* implement a menu system
-* add in the DDS-60 control code
+* Interface display to teensy, test writing, etc
+* Interface rotary encoder, get rotate and button press events
+* Basic display of 8-digit frequency
+* Implement a simple 'event' system to produce system events
+* Get frequency column select and increment/decrement working
+* Save state in the EEPROM, restore state on start up
+  
+To be done:
+
+* implement a simple menu system (hard!?)
+* add in the DDS-60 control code (should be easy?)
 
 About
 =====
@@ -26,7 +35,7 @@ One piece of test gear that would be useful is called a Signal Generator.  This
 is a piece of kit that generates a radio signal of a known frequency.  It can
 also be used as a VFO (variable frequency oscillator) in a receiver.
 
-The modern way to accurately generate an RF signal is to use the AD9850 DDS chip
+The modern way to accurately generate an RF signal is to use the AD9851 DDS chip
 which digitally generates a known frequency from a crystal source.  There are 
 quite a few people offering small boards using this chip but I like the
 `DDS-60 daughterboard <http://midnightdesignsolutions.com/dds60/>`_
@@ -48,10 +57,10 @@ I got the rotary encoder from
 Interface
 =========
 
-I don't need a lot of functionality in this VFO, I just want:
+I don't need a lot of functionality in this VFO, I just want to:
 
-* Able to set a frequency from 1.000000Mz to 30.000000MHz with steps down to 1Hz
-* Able to save and restore a number of frequencies
+* set a frequency from 1.000000Mz to 30.000000MHz with steps down to 1Hz
+* save and restore a number of frequencies
 
 It should be possible to do all this with an interface made up of:
 
