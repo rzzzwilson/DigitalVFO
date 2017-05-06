@@ -101,7 +101,7 @@ int VfoSelectDigit;           // selected digit, indexed from zero at right
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// The system queue.
+// The system event queue.
 // Implemented as a circular buffer.
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -111,46 +111,74 @@ byte event_queue[QueueLength];
 int queue_fore = 0;   // fore pointer into circular buffer
 int queue_aft = 0;    // aft pointer into circular buffer
 
-bool queue_empty()
+void push_event(byte event)
 {
-  return (queue_fore == queue_aft);
-}
+  // Must protect from RE code fiddling with queue
+  noInterrupts();
 
-void push_queue(byte event)
-{
-  event_queue[queue_fore++] = event;
+  // put new event into next empty slot
+  event_queue[queue_fore] = event;
+
+  // move fore ptr one slot up, wraparound if necessary
+  ++queue_fore;
   if (queue_fore >= QueueLength)
     queue_fore = 0;
-  if (queue_fore == queue_aft)
+
+  // if queue full, abort
+  if (queue_aft == queue_fore)
+  {
       dump_queue("ERROR: event queue full:");
+      Serial.println("Teensy is paused!");
       while (1);    // stop here
+  }
+
+  interrupts();
 }
 
-byte pop_queue()
+byte pop_event()
 {
+  // Must protect from RE code fiddling with queue
+  noInterrupts();
+
+  // if queue empty, return None event
   if (queue_fore == queue_aft)
     return vfo_None;
 
-  byte event = event_queue[queue_aft++];
+  // get next event
+  byte event = event_queue[queue_aft];
 
+  // mkove aft pointer up one slot, wrap if necessary
+  ++queue_aft;
   if (queue_aft  >= QueueLength)
     queue_aft = 0;
+
+  interrupts();
 
   return event;
 }
 
 int queue_len()
 {
+  // Must protect from RE code fiddling with queue
+  noInterrupts();
+
+  // get distance between fore and aft pointers
   int result = queue_fore - queue_aft;
-  
+
+  // handle case when events wrap around
   if (result < 0)
     result += QueueLength;
 
+  interrupts();
+  
   return result;
 }
 
 void dump_queue(const char *msg)
 {
+  // Must protect from RE code fiddling with queue
+  noInterrupts();
+  
   Serial.print("Queue: "); Serial.println(msg);
   for (int i = 0; i < QueueLength; ++i)
   {
@@ -160,6 +188,8 @@ void dump_queue(const char *msg)
   Serial.print("Queue length="); Serial.println(queue_len());
   Serial.print("queue_aft="); Serial.print(queue_aft);
   Serial.print(", queue_fore="); Serial.println(queue_fore);
+
+  interrupts();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -277,84 +307,82 @@ void re_setup(int position)
 
 void pinPush_isr()
 {
-  cli();
-    re_down = ! (PIND & 0x10);
-    if (re_down)
+  re_down = ! (PIND & 0x10);
+  if (re_down)
+  {
+    // button pushed down
+    re_rotation = false;      // no rotation while down so far
+    re_down_time = millis();  // note time we went down
+  }
+  else
+  {
+    // button released, check if rotation, UP event if not
+    if (! re_rotation)
     {
-      // button pushed down
-      re_rotation = false;      // no rotation while down so far
-      re_down_time = millis();  // note time we went down
-    }
-    else
-    {
-      // button released, check if rotation, UP event if not
-      if (! re_rotation)
-      {
-        unsigned long push_time = millis() - re_down_time;
+      unsigned long push_time = millis() - re_down_time;
 
-        if (push_time < HoldClickTime)
-          push_queue(vfo_Click);
-        else
-          push_queue(vfo_HoldClick);
+      if (push_time < HoldClickTime)
+      {
+        push_event(vfo_Click);
+      }
+      else
+      {
+        push_event(vfo_HoldClick);
       }
     }
-  sei();
+  }
 }
 
 void pinA_isr()
 {
-  // stop interrupts, read A & B pins, restore interrupts
-  byte reading;
+  byte reading = PIND & 0xC;
 
-  cli();
-    reading = PIND & 0xC;
-
-    if (reading == B00001100 && aFlag)
-    { // check that we have both pins at detent (HIGH) and that we are expecting detent on
-      // this pin's rising edge
-      if (re_down)
-      {
-        push_queue(vfo_DnRLeft);
-        re_rotation = true;
-      }
-      else
-      {
-        push_queue(vfo_RLeft);
-      }
-      bFlag = 0; //reset flags for the next turn
-      aFlag = 0; //reset flags for the next turn
+  if (reading == B00001100 && aFlag)
+  { // check that we have both pins at detent (HIGH) and that we are expecting detent on
+    // this pin's rising edge
+    if (re_down)
+    {
+      push_event(vfo_DnRLeft);
+      re_rotation = true;
     }
-    else if (reading == B00000100)
-      // show we're expecting pinB to signal the transition to detent from free rotation
-      bFlag = 1;
-  sei();
+    else
+    {
+      push_event(vfo_RLeft);
+    }
+    bFlag = 0; //reset flags for the next turn
+    aFlag = 0; //reset flags for the next turn
+  }
+  else if (reading == B00000100)
+  {
+    // show we're expecting pinB to signal the transition to detent from free rotation
+    bFlag = 1;
+  }
 }
 
 void pinB_isr()
 {
-  // stop interrupts, read A & B pins, restore interrupts
-  byte reading;
-
-  cli();
-    reading = PIND & 0xC;
-    
-    if (reading == B00001100 && bFlag)
-    { // check that we have both pins at detent (HIGH) and that we are expecting detent on
-      // this pin's rising edge
-      if (re_down)
-      {
-        push_queue(vfo_DnRRight);
-        re_rotation = true;
-      }
-      else
-        push_queue(vfo_RRight);
-      bFlag = 0; //reset flags for the next turn
-      aFlag = 0; //reset flags for the next turn
+  byte reading = PIND & 0xC;
+  
+  if (reading == B00001100 && bFlag)
+  { // check that we have both pins at detent (HIGH) and that we are expecting detent on
+    // this pin's rising edge
+    if (re_down)
+    {
+      push_event(vfo_DnRRight);
+      re_rotation = true;
     }
-    else if (reading == B00001000)
-      // show we're expecting pinA to signal the transition to detent from free rotation
-      aFlag = 1;
-  sei();
+    else
+    {
+      push_event(vfo_RRight);
+    }
+    bFlag = 0; //reset flags for the next turn
+    aFlag = 0; //reset flags for the next turn
+  }
+  else if (reading == B00001000)
+  {
+    // show we're expecting pinA to signal the transition to detent from free rotation
+    aFlag = 1;
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -394,37 +422,39 @@ void show_menu()
 
   while (true)
   {
-    // get next event and handle it
-    byte event = pop_queue();
-//    Serial.print("Menu: event="); Serial.println(event);
-
-    switch (event)
+    if (queue_len() > 0)
     {
-      case vfo_RLeft:
-        Serial.println("Menu: vfo_RLeft");
-        break;
-      case vfo_RRight:
-        Serial.println("Menu: vfo_RRight");
-        break;
-      case vfo_DnRLeft:
-        Serial.println("Menu: vfo_DnRLeft");
-        break;
-      case vfo_DnRRight:
-        Serial.println("Menu: vfo_DnRRight");
-        break;
-      case vfo_Click:
-        Serial.println("Menu: vfo_Click");
-        break;
-      case vfo_HoldClick:
-        Serial.println("Menu: vfo_Click");
-        return;
-        break;
-      case vfo_None:
-        // ignore this as there's LOTS of them
-        break;
-      default:
-        Serial.print("Menu: unrecognized event "); Serial.println(event);
-        break;
+      // get next event and handle it
+      byte event = pop_event();
+      
+      switch (event)
+      {
+        case vfo_RLeft:
+          Serial.println("Menu: vfo_RLeft");
+          continue;
+        case vfo_RRight:
+          Serial.println("Menu: vfo_RRight");
+          continue;
+        case vfo_DnRLeft:
+          Serial.println("Menu: vfo_DnRLeft");
+          continue;
+        case vfo_DnRRight:
+          Serial.println("Menu: vfo_DnRRight");
+          continue;
+        case vfo_Click:
+          Serial.println("Menu: vfo_Click");
+          continue;
+        case vfo_HoldClick:
+          Serial.println("Menu: vfo_Click");
+          return;
+//          break;
+//        case vfo_None:
+//          // ignore this as there's LOTS of them
+//          break;
+        default:
+          Serial.print("Menu: unrecognized event "); Serial.println(event);
+          continue;
+      }
     }
   }
 }
@@ -458,26 +488,26 @@ void setup()
 
   Serial.println("Digital VFO 0.1");
   Serial.print("Frequency="); Serial.println(VfoFrequency);
+
+  print_freq(VfoFrequency, VfoSelectDigit);
 }
 
 //------------------------------------------------------------------------------
 // Standard Arduino loop() function.
 //------------------------------------------------------------------------------
+
 void loop()
 {
-  unsigned long old_freq = 0;
-  int old_position = -1;
+  // remember old values, update screen if changed
+  unsigned long old_freq = VfoFrequency;
+  int old_position = VfoSelectDigit;
 
-  print_freq(VfoFrequency, VfoSelectDigit);
-  old_freq = VfoFrequency;
-  old_position = VfoSelectDigit;
-
-  while (!queue_empty())
+  // handle all events in the queue
+  while (queue_len() > 0)
   {
     // get next event and handle it
-    byte event = pop_queue();
-    Serial.print("Handling event "); Serial.println(event);
-
+    byte event = pop_event();
+    
     switch (event)
     {
       case vfo_RLeft:
@@ -520,9 +550,9 @@ void loop()
     // display frequency if changed, update DDS-60
     if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
     {
-//      print_freq(VfoFrequency, VfoSelectDigit);
-//      old_freq = VfoFrequency;
-//      old_position = VfoSelectDigit;
+      print_freq(VfoFrequency, VfoSelectDigit);
+      old_freq = VfoFrequency;
+      old_position = VfoSelectDigit;
   
       save_to_eeprom();
       
