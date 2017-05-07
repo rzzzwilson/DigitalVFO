@@ -15,7 +15,7 @@
 #include <EEPROM.h>
 
 
-//#define DEBUG   // define if debugging
+#define DEBUG   // define if debugging
 
 
 // Digital VFO program name & version
@@ -197,7 +197,12 @@ void banner(void)
 // Code to handle the menus.
 ////////////////////////////////////////////////////////////////////////////////
 
+// typedef for a menu display handler
+// this handler draws the entire current screen
 typedef void (*MenuDisplay)(Menu *menu, int slot_num);
+
+// typedef for a menu item action handler
+// this handles selecting a particular item
 typedef void (*MenuAction)(Menu *menu, int slot_num);
 
 struct Menu
@@ -214,14 +219,16 @@ void show_menu(struct Menu *menu)
   int item_index = 0;
   
   Serial.print("show_menu("); Serial.print(menu->title); Serial.println(")");
-
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.write(menu->title);
+  // update the menu display
+  Serial.print("Calling menu->display: menu->title=");
+  Serial.print(menu->title);
+  Serial.print(", item_index=");
+  Serial.println(item_index);
   menu->display(menu, item_index);
 
   while (true)
   {
+    // handle any pending event
     if (queue_len() > 0)
     {
       // get next event and handle it
@@ -253,7 +260,8 @@ void show_menu(struct Menu *menu)
           Serial.println("Menu: vfo_Click");
           if (menu->action)
             (*menu->action)(menu, item_index);
-          break;
+          flush_queue();
+          return;
         case vfo_HoldClick:
           Serial.println("Menu: vfo_HoldClick, exit menu");
           flush_queue();
@@ -262,8 +270,8 @@ void show_menu(struct Menu *menu)
           Serial.print("Menu: unrecognized event "); Serial.println(event);
           break;
       }
-
-      // update the item display
+      
+      // update the menu display
       Serial.print("Calling menu->display: menu->title=");
       Serial.print(menu->title);
       Serial.print(", item_index=");
@@ -658,26 +666,26 @@ void show_main_screen(void)
 // Define the menus to be used, plus handler code
 //-----
 
-const char *main_menu_items[2] = {"Save", "Restore"};
-#define NumMainMenuItems (sizeof(main_menu_items)/sizeof(const char *))
+const char *menu_items[2] = {"Save", "Restore"};
+#define NumMainMenuItems (sizeof(menu_items)/sizeof(const char *))
 
-Menu main_menu = {"Menu", menu_item_display, menu_item_action,
-                  NumMainMenuItems, main_menu_items};
+Menu main_menu = {"Menu", menu_display, menu_select,
+                  NumMainMenuItems, menu_items};
 
-Menu save_menu = {"Save", save_restore_item_display, save_item_action,
+Menu save_menu = {"Save", save_restore_display, save_select,
                   NumSaveSlots, NULL};
 
-Menu restore_menu = {"Restore", save_restore_item_display, restore_item_action,
+Menu restore_menu = {"Restore", save_restore_display, restore_select,
                      NumSaveSlots, NULL};
 
 
-void menu_item_display(Menu *menu, int slot_num)
+void menu_display(Menu *menu, int slot_num)
 {
-  Serial.print("menu_item_display: menu="); Serial.println(menu->title);
-  Serial.print("menu_item_display: slot_num="); Serial.println(slot_num);
-
+  Serial.println("menu_display() called");
+  
   // figure out max length of item strings
   int max_len = 0;
+
   Serial.print("menu->num_items="); Serial.println(menu->num_items);
   for (int i = 0; i < menu->num_items; ++ i)
   {
@@ -685,24 +693,29 @@ void menu_item_display(Menu *menu, int slot_num)
 
     if (new_len > max_len)
         max_len = new_len;
+
     Serial.print("i="); Serial.print(i);
     Serial.print(", new_len="); Serial.print(new_len);
     Serial.print(", max_len="); Serial.println(max_len);
   }
   Serial.print("Max item len="); Serial.println(max_len);
 
+  // write menu title on upper row
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write(menu->title);
+
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
-  lcd.write(BlankRow);
-  Serial.print("Setting cursor to column "); Serial.println(NUM_COLS - max_len);
-  Serial.print("item text="); Serial.println(menu->items[slot_num]);
   lcd.setCursor(NUM_COLS - max_len, 1);
   lcd.write(menu->items[slot_num]);
+  Serial.print("Setting cursor to column "); Serial.println(NUM_COLS - max_len);
+  Serial.print("item text="); Serial.println(menu->items[slot_num]);
 }
 
-void menu_item_action(Menu *menu, int slot_num)
+void menu_select(Menu *menu, int slot_num)
 {
-  Serial.print("menu_item_action: slot_num="); Serial.println(slot_num);
+  Serial.print("menu_select: slot_num="); Serial.println(slot_num);
   const char *action_text = menu->items[slot_num];
 
   if (strcmp(action_text, "Save") == 0)
@@ -715,25 +728,31 @@ void menu_item_action(Menu *menu, int slot_num)
   }
 }
 
-void save_restore_item_display(Menu *menu, int slot_num)
+// draw the Save or Restore screen
+void save_restore_display(Menu *menu, int slot_num)
 {
-  // display data for save frequency slot 
-  Serial.print("save_restore_item_display: menu="); Serial.println(menu->title);
-  Serial.print("save_restore_item_display: slot_num="); Serial.println(slot_num);
+  Serial.print("save_restore_display: menu="); Serial.println(menu->title);
+  Serial.print("save_restore_display: slot_num="); Serial.println(slot_num);
 
   // max length of item strings is "0: xxxxxxxxHz"
   const int max_len = 13;
   char buf[MAX_FREQ_CHARS + 1];
-  int address = SaveSlotBase + slot_num * sizeof(unsigned long);
-  unsigned long freq;
   
   // get saved frequency, convert to a display buffer
+  int address = SaveSlotBase + slot_num * sizeof(unsigned long);
+  unsigned long freq;
+
   EEPROM.get(address, freq);
-  Serial.print("save_restore_item_display: freq="); Serial.println(freq);
   ltobbuff(buf, MAX_FREQ_CHARS, freq);
   buf[MAX_FREQ_CHARS] = 0;
-  Serial.print("save_restore_item_display: buf="); Serial.write(buf, MAX_FREQ_CHARS);
+  Serial.print("save_restore_display: freq="); Serial.println(freq);
+  Serial.print("save_restore_display: buf="); Serial.write(buf, MAX_FREQ_CHARS);
   Serial.println("");
+
+  // write menu title on first row
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write(menu->title);
   
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
@@ -745,20 +764,25 @@ void save_restore_item_display(Menu *menu, int slot_num)
   lcd.write("Hz");
 }
 
-void save_item_action(Menu *menu, int slot_num)
+void save_select(Menu *menu, int slot_num)
 {
   int address = SaveSlotBase + slot_num * sizeof(unsigned long);
 
-  Serial.print("save_item_action: saving Frequency "); Serial.print(VfoFrequency);
+  Serial.print("save_select: saving Frequency "); Serial.print(VfoFrequency);
   Serial.print(" to slot "); Serial.print(slot_num);
-  Serial.print("="); Serial.println(address);
-  
+  Serial.print("="); Serial.println(address, HEX);
   EEPROM.put(address, VfoFrequency);
 }
 
-void restore_item_action(Menu *menu, int slot_num)
+void restore_select(Menu *menu, int slot_num)
 {
-  Serial.print("restore_item_action: slot_num="); Serial.println(slot_num);
+  Serial.print("restore_select: slot_num="); Serial.println(slot_num);
+  int address = SaveSlotBase + slot_num * sizeof(unsigned long);
+
+  EEPROM.get(address, VfoFrequency);
+  Serial.print("restore_select: restoring frequency "); Serial.print(VfoFrequency);
+  Serial.print(" from slot "); Serial.print(slot_num);
+  Serial.print("="); Serial.println(address, HEX);
 }
 
 //----------------------------------------------------------
