@@ -15,22 +15,26 @@
 #include <EEPROM.h>
 
 
+// Digital VFO program name & version
+const char *ProgramName = "Digital VFO";
+const char *Version = "0.2";
+
 // display constants - below is for ubiquitous small HD44780 16x2 display
 #define NUM_ROWS        2
 #define NUM_COLS        16
 
 // define data pins we connect to the LCD
-static byte lcd_RS = 7;
-static byte lcd_ENABLE = 8;
-static byte lcd_D4 = 9;
-static byte lcd_D5 = 10;
-static byte lcd_D6 = 11;
-static byte lcd_D7 = 12;
+const byte lcd_RS = 7;
+const byte lcd_ENABLE = 8;
+const byte lcd_D4 = 9;
+const byte lcd_D5 = 10;
+const byte lcd_D6 = 11;
+const byte lcd_D7 = 12;
 
 // define data pins used by the rotary encoder
-static int re_pinA = 2;     // encoder A pin
-static int re_pinB = 3;     // encoder B pin
-static int re_pinPush = 4;  // encoder pushbutton pin
+const int re_pinA = 2;     // encoder A pin
+const int re_pinB = 3;     // encoder B pin
+const int re_pinPush = 4;  // encoder pushbutton pin
 
 // max and min frequency showable
 #define MAX_FREQ        30000000L
@@ -87,17 +91,59 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 #define vfo_Click     5
 #define vfo_HoldClick 6
 
-// old values of 're_delta' and 're_position'
-int oldEncOffset = 1;
-byte oldEncPos = 180;
-
-
 ////////////////////////////////////////////////////////////////////////////////
 // The VFO state variables
 ////////////////////////////////////////////////////////////////////////////////
 
 unsigned long VfoFrequency;   // VFO frequency (Hz)
-int VfoSelectDigit;           // selected digit, indexed from zero at right
+int VfoSelectDigit;           // selected column index, zero at the right
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Utility routines
+////////////////////////////////////////////////////////////////////////////////
+
+//----------------------------------------------------------
+// Abort the program.
+// Tries to tell the world what went wrong, then just loops.
+//
+// msg  address of error string
+//
+// The message may be truncated at display width.
+//----------------------------------------------------------
+
+void abort(const char *msg)
+{
+  Serial.println(msg);
+  Serial.println("Teensy is paused!");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write(msg);
+  lcd.setCursor(0, 1);
+  lcd.write("Teensy is paused");
+
+  // wait here forever
+  while (1);
+}
+
+//----------------------------------------------------------
+// Convert an event number to a display string
+//----------------------------------------------------------
+
+const char * event2display(byte event)
+{
+  switch (event)
+  {
+    case vfo_None:      return "vfo_None";
+    case vfo_RLeft:     return "vfo_RLeft";
+    case vfo_RRight:    return "vfo_RRight";
+    case vfo_DnRLeft:   return "vfo_DnRLeft";
+    case vfo_DnRRight:  return "vfo_DnRRight";
+    case vfo_Click:     return "vfo_Click";
+    case vfo_HoldClick: return "vfo_HoldClick";
+    default:            return "UNKNOWN!";
+  }
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,9 +159,6 @@ int queue_aft = 0;    // aft pointer into circular buffer
 
 void push_event(byte event)
 {
-  // Must protect from RE code fiddling with queue
-//  noInterrupts();
-
   // put new event into next empty slot
   event_queue[queue_fore] = event;
 
@@ -128,11 +171,8 @@ void push_event(byte event)
   if (queue_aft == queue_fore)
   {
       dump_queue("ERROR: event queue full:");
-      Serial.println("Teensy is paused!");
-      while (1);    // stop here
+      abort("Event queue full");
   }
-
-//  interrupts();
 }
 
 byte pop_event(void)
@@ -170,20 +210,21 @@ int queue_len(void)
     result += QueueLength;
 
   interrupts();
-  
+
   return result;
 }
 
 void flush_queue(void)
 {
-  
+  queue_fore = 0;
+  queue_aft = 0;
 }
 
 void dump_queue(const char *msg)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
-  
+
   Serial.print("Queue: "); Serial.println(msg);
   for (int i = 0; i < QueueLength; ++i)
   {
@@ -197,20 +238,22 @@ void dump_queue(const char *msg)
   interrupts();
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // Utility routines for the display.
 ////////////////////////////////////////////////////////////////////////////////
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------
 // Function to convert an unsigned long into an array of byte digit values.
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
 //     value    the unsigned long value to convert
 // The function won't overflow the given buffer, it will truncate at the left.
-// 
+//
 // For example, given the value 1234 and a buffer of length 7, will fill the
 // buffer with 0001234.  Given 123456789 it will fill with 3456789.
-//------------------------------------------------------------------------------
+//----------------------------------------------------------
+
 void ltobbuff(char *buf, int bufsize, unsigned long value)
 {
   char *ptr = buf + bufsize - 1;
@@ -218,21 +261,22 @@ void ltobbuff(char *buf, int bufsize, unsigned long value)
   for (int i = 0; i < bufsize; ++i)
   {
     int rem = value % 10;
-    
+
     value = value / 10;
     *ptr-- = char(rem);
   }
 }
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------
 // Print the frequency on the display with selected colum underlined.
 //     freq     the frequency to display
 //     sel_col  the selection offset of digit to underline
 //              (0 is rightmost digit, increasing to the left)
 //     row      the row to use, 0 is at top
 // The row and columns used to show frequency digits are defined elsewhere.
-// A final "Hz" is written. 
-//------------------------------------------------------------------------------
+// A final "Hz" is written.
+//----------------------------------------------------------
+
 void print_freq(unsigned long freq, int sel_col, int row)
 {
   char buf [MAX_FREQ_CHARS];
@@ -265,9 +309,10 @@ void print_freq(unsigned long freq, int sel_col, int row)
         lcd.write(char_val + '0');
     }
   }
-  
+
   lcd.write("Hz");
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Interrupt driven rotary encoder interface.
@@ -287,21 +332,18 @@ volatile byte aFlag = 0;
 // expecting rising edge on pinA - at detent
 volatile byte bFlag = 0;
 
-// this variable stores our current value of encoder position.
-// Change to int or uin16_t instead of byte if you want to record a larger range than 0-255
-//volatile long re_delta = 0;
-
 //----------------------------------------------------------
 // Setup the encoder stuff, pins, etc.
 //----------------------------------------------------------
+
 void re_setup(int position)
 {
   // set pinA as an input, pulled HIGH to the logic voltage (5V or 3.3V for most cases)
   pinMode(re_pinA, INPUT_PULLUP);
-  
+
   // set pinB as an input, pulled HIGH to the logic voltage (5V or 3.3V for most cases)
   pinMode(re_pinB, INPUT_PULLUP);
-  
+
   // set pinPush as an input, pulled HIGH to the logic voltage (5V or 3.3V for most cases)
   pinMode(re_pinPush, INPUT_PULLUP);
 
@@ -330,10 +372,12 @@ void pinPush_isr(void)
       if (push_time < HoldClickTime)
       {
         push_event(vfo_Click);
+        Serial.println("pinPush_isr pushed vfo_Click to queue");
       }
       else
       {
         push_event(vfo_HoldClick);
+        Serial.println("pinPush_isr pushed vfo_HoldClick to queue");
       }
     }
   }
@@ -354,6 +398,7 @@ void pinA_isr(void)
     else
     {
       push_event(vfo_RLeft);
+      Serial.println("pinA_isr pushed vfo_RLeft to queue");
     }
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
@@ -368,18 +413,20 @@ void pinA_isr(void)
 void pinB_isr(void)
 {
   byte reading = PIND & 0xC;
-  
+
   if (reading == B00001100 && bFlag)
   { // check that we have both pins at detent (HIGH) and that we are expecting detent on
     // this pin's rising edge
     if (re_down)
     {
       push_event(vfo_DnRRight);
+      Serial.println("pinB_isr pushed vfo_DnRRight to queue");
       re_rotation = true;
     }
     else
     {
       push_event(vfo_RRight);
+      Serial.println("pinB_isr pushed vfo_RRight to queue");
     }
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
@@ -391,15 +438,16 @@ void pinB_isr(void)
   }
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // Code to save/restore in EEPROM.
 ////////////////////////////////////////////////////////////////////////////////
 
 // address for unsigned long 'frequency'
-static int AddressFreq = 0;
+const int AddressFreq = 0;
 
 // address for int 'selected digit'
-static int AddressSelDigit = AddressFreq + sizeof(AddressFreq);
+const int AddressSelDigit = AddressFreq + sizeof(AddressFreq);
 
 
 // save VFO state to EEPROM
@@ -415,6 +463,7 @@ void restore_from_eeprom(void)
   EEPROM.get(AddressFreq, VfoFrequency);
   EEPROM.get(AddressSelDigit, VfoSelectDigit);
 }
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Code to handle the menus.
@@ -447,7 +496,8 @@ void show_menu(struct Menu *menu)
     {
       // get next event and handle it
       byte event = pop_event();
-      
+      Serial.print("show_menu: popped event "); Serial.println(event2display(event));
+
       switch (event)
       {
         case vfo_RLeft:
@@ -477,18 +527,24 @@ void show_menu(struct Menu *menu)
   }
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
-// Code to handle the DDS-60.
+// Code to handle the DDS-60
 ////////////////////////////////////////////////////////////////////////////////
 
 void update_dds60(unsigned long freq)
 {
-  
+
 }
 
-//------------------------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////////////////////
+// Main VFO code
+////////////////////////////////////////////////////////////////////////////////
+
+//----------------------------------------------------------
 // The standard Arduino setup() function.
-//------------------------------------------------------------------------------
+//----------------------------------------------------------
 
 void setup(void)
 {
@@ -500,25 +556,35 @@ void setup(void)
   lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
 
   restore_from_eeprom();
-  
+
   // set up the rotary encoder
   re_setup(VfoSelectDigit);
 
-  Serial.println("Digital VFO 0.1");
-  Serial.print("Frequency="); Serial.println(VfoFrequency);
+  // show program anme and version number
+  Serial.print(ProgramName); Serial.print(" "); Serial.println(Version);
+  Serial.println("VK4FAWR");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write(ProgramName);
+  lcd.write(" ");
+  lcd.write(Version);
+  lcd.setCursor(0, 1);
+  lcd.write("VK4FAWR");
+  delay(3000);    // wait a bit
 
+  // get going
   show_main_screen();
 }
 
 void show_main_screen(void)
 {
   lcd.clear();
-  print_freq(VfoFrequency, VfoSelectDigit, 0);  
+  print_freq(VfoFrequency, VfoSelectDigit, 0);
 }
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------
 // Standard Arduino loop() function.
-//------------------------------------------------------------------------------
+//----------------------------------------------------------
 
 void item_display(int slot_num)
 {
@@ -527,7 +593,7 @@ void item_display(int slot_num)
 
 void item_action(int slot_num)
 {
-  
+  Serial.print("item_action: slot_num="); Serial.println(slot_num);
 }
 
 const char *main_menu_items[2] = {"Save", "Restore"};
@@ -544,7 +610,8 @@ void loop(void)
   {
     // get next event and handle it
     byte event = pop_event();
-    
+    Serial.print("loop: popped event "); Serial.println(event2display(event));
+
     switch (event)
     {
       case vfo_RLeft:
@@ -577,7 +644,7 @@ void loop(void)
       case vfo_HoldClick:
         Serial.println("Got vfo_HoldClick: calling show_menu()");
         show_menu(&main_menu);
-//        Serial.println("After show_menu()");
+        Serial.println("After show_menu()");
         dump_queue("After show_menu()");
         show_main_screen();
         break;
@@ -585,16 +652,16 @@ void loop(void)
         Serial.print("Unrecognized event: "); Serial.println(event);
         break;
     }
-    
+
     // display frequency if changed, update DDS-60
     if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
     {
       print_freq(VfoFrequency, VfoSelectDigit, 0);
       old_freq = VfoFrequency;
       old_position = VfoSelectDigit;
-  
+
       save_to_eeprom();
-      
+
       update_dds60(VfoFrequency);
     }
   }
