@@ -15,9 +15,14 @@
 #include <EEPROM.h>
 
 
+#define DEBUG   // define if debugging
+
+
 // Digital VFO program name & version
 const char *ProgramName = "Digital VFO";
 const char *Version = "0.2";
+const char *Callsign = "vk4fawr";
+const char *Callsign16 = "vk4fawr         ";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
 #define NUM_ROWS        2
@@ -116,16 +121,23 @@ void abort(const char *msg)
 {
   Serial.println(msg);
   Serial.println("Teensy is paused!");
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.write(msg);
-  lcd.setCursor(0, 1);
-  lcd.write("Teensy is paused");
-
-  // wait here forever
-  while (1);
+  while (1)
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.write(msg);
+    lcd.setCursor(0, 1);
+    lcd.write(msg + NUM_COLS);
+    delay(2000);
+    
+    lcd.clear();
+    lcd.write("Teensy is paused");
+    lcd.cursor();
+    delay(2000);
+  }
 }
 
+#ifdef DEBUG
 //----------------------------------------------------------
 // Convert an event number to a display string
 //----------------------------------------------------------
@@ -144,8 +156,36 @@ const char * event2display(byte event)
     default:            return "UNKNOWN!";
   }
 }
+#endif
 
+// display a simple banner
+void banner(void)
+{
+  Serial.print(ProgramName); Serial.print(" "); Serial.println(Version);
+  Serial.println(Callsign);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write(ProgramName);
+  lcd.write(" ");
+  lcd.write(Version);
+  lcd.setCursor(0, 1);
+  lcd.write(Callsign);
+  delay(2000);    // wait a bit
 
+  for (int i = 0; i <= 16; ++i)
+  {
+    lcd.clear();
+    lcd.setCursor(i, 0);
+    lcd.write(ProgramName);
+    lcd.write(" ");
+    lcd.write(Version);
+    lcd.setCursor(0, 1);
+    lcd.write(Callsign16 + i);
+    delay(200);
+  }
+
+  delay(500);
+}
 ////////////////////////////////////////////////////////////////////////////////
 // The system event queue.
 // Implemented as a circular buffer.
@@ -553,6 +593,7 @@ void setup(void)
   // initialize the display
   lcd.begin(NUM_COLS, NUM_COLS);      // define display size
   lcd.clear();
+  lcd.noCursor();
   lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
 
   restore_from_eeprom();
@@ -560,18 +601,9 @@ void setup(void)
   // set up the rotary encoder
   re_setup(VfoSelectDigit);
 
-  // show program anme and version number
-  Serial.print(ProgramName); Serial.print(" "); Serial.println(Version);
-  Serial.println("VK4FAWR");
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.write(ProgramName);
-  lcd.write(" ");
-  lcd.write(Version);
-  lcd.setCursor(0, 1);
-  lcd.write("VK4FAWR");
-  delay(3000);    // wait a bit
-
+  // show program name and version number
+  banner();
+  
   // get going
   show_main_screen();
 }
