@@ -17,11 +17,12 @@ Completed:
 * Implement a simple 'event' system to produce system events
 * Get frequency column select and increment/decrement working
 * Save state in the EEPROM, restore state on start up
+* implement a simple menu system 
   
 To be done:
 
-* implement a simple menu system (hard!?)
 * add in the DDS-60 control code (should be easy?)
+* extend the menu system to allow extra functionality
 
 About
 =====
