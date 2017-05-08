@@ -20,7 +20,7 @@
 
 // Digital VFO program name & version
 const char *ProgramName = "Digital VFO";
-const char *Version = "0.3";
+const char *Version = "0.4";
 const char *Callsign = "vk4fawr";
 const char *Callsign16 = "vk4fawr         ";
 
@@ -108,7 +108,7 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 ////////////////////////////////////////////////////////////////////////////////
 
 unsigned long VfoFrequency;   // VFO frequency (Hz)
-int VfoSelectDigit;           // selected column index, zero at the right
+byte VfoSelectDigit;          // selected column index, zero at the right
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -118,16 +118,16 @@ int VfoSelectDigit;           // selected column index, zero at the right
 //----------------------------------------------------------
 // Abort the program.
 // Tries to tell the world what went wrong, then just loops.
-//
-// msg  address of error string
-//
-// The message may be truncated at display width.
+//     msg  address of error string
 //----------------------------------------------------------
 
 void abort(const char *msg)
 {
+  // print error on console (maybe)
   Serial.println(msg);
   Serial.println("Teensy is paused!");
+
+  // show what we can on the display, forever
   while (1)
   {
     lcd.clear();
@@ -139,7 +139,6 @@ void abort(const char *msg)
     
     lcd.clear();
     lcd.write("Teensy is paused");
-    lcd.cursor();
     delay(2000);
   }
 }
@@ -148,6 +147,7 @@ void abort(const char *msg)
 // Convert an event number to a display string
 //----------------------------------------------------------
 
+#ifdef DEBUG
 const char * event2display(byte event)
 {
   switch (event)
@@ -162,6 +162,7 @@ const char * event2display(byte event)
     default:            return "UNKNOWN!";
   }
 }
+#endif
 
 // display a simple banner
 void banner(void)
@@ -177,7 +178,7 @@ void banner(void)
   lcd.write(Callsign);
   delay(2000);    // wait a bit
 
-  for (int i = 0; i <= 16; ++i)
+  for (int i = 0; i <= NUM_COLS; ++i)
   {
     lcd.clear();
     lcd.setCursor(i, 0);
@@ -190,6 +191,59 @@ void banner(void)
   }
 
   delay(500);
+}
+
+//----------------------------------------------------------
+// Function to convert an unsigned long into an array of decimal digit values.
+//     buf      address of buffer for byte results
+//     bufsize  size of the 'buf' buffer
+//     value    the unsigned long value to convert
+// The function won't overflow the given buffer, it will truncate at the left.
+// Leading zeros are suppressed.
+//
+// For example, given the value 1234 and a buffer of length 7, will fill the
+// buffer with "   1234".  Given 123456789 it will fill with "3456789".
+//----------------------------------------------------------
+
+void ltochbuff(char *buf, int bufsize, unsigned long value)
+{
+  char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
+
+  for (int i = 0; i < bufsize; ++i)
+  {
+    int rem = value % 10;
+    char ch = char(rem + '0');
+
+    value = value / 10;
+    if (value == 0L && ch == '0')
+      *ptr-- = ' ';
+    else
+      *ptr-- = ch;
+  }
+}
+
+//----------------------------------------------------------
+// Function to convert an unsigned long into an array of byte digit values.
+//     buf      address of buffer for byte results
+//     bufsize  size of the 'buf' buffer
+//     value    the unsigned long value to convert
+// The function won't overflow the given buffer, it will truncate at the left.
+//
+// For example, given the value 1234 and a buffer of length 7, will fill the
+// buffer with 0001234.  Given 123456789 it will fill with 3456789.
+//----------------------------------------------------------
+
+void ltobbuff(char *buf, int bufsize, unsigned long value)
+{
+  char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
+
+  for (int i = 0; i < bufsize; ++i)
+  {
+    int rem = value % 10;
+
+    value = value / 10;
+    *ptr-- = char(rem);
+  }
 }
 
 
@@ -226,10 +280,12 @@ void show_menu(struct Menu *menu)
   Serial.println(item_index);
   menu->display(menu, item_index);
 
+  flush_events();
+
   while (true)
   {
     // handle any pending event
-    if (queue_len() > 0)
+    if (events_pending() > 0)
     {
       // get next event and handle it
       byte event = pop_event();
@@ -260,11 +316,11 @@ void show_menu(struct Menu *menu)
           Serial.println("Menu: vfo_Click");
           if (menu->action)
             (*menu->action)(menu, item_index);
-          flush_queue();
-          return;
+          flush_events();
+          break;
         case vfo_HoldClick:
           Serial.println("Menu: vfo_HoldClick, exit menu");
-          flush_queue();
+          flush_events();
           return;
         default:
           Serial.print("Menu: unrecognized event "); Serial.println(event);
@@ -333,7 +389,7 @@ byte pop_event(void)
   return event;
 }
 
-int queue_len(void)
+int events_pending(void)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
@@ -350,7 +406,7 @@ int queue_len(void)
   return result;
 }
 
-void flush_queue(void)
+void flush_events(void)
 {
   queue_fore = 0;
   queue_aft = 0;
@@ -367,7 +423,7 @@ void dump_queue(const char *msg)
     Serial.print(" "); Serial.print(event_queue[i]);
   }
   Serial.println("");
-  Serial.print("Queue length="); Serial.println(queue_len());
+  Serial.print("Queue length="); Serial.println(events_pending());
   Serial.print("queue_aft="); Serial.print(queue_aft);
   Serial.print(", queue_fore="); Serial.println(queue_fore);
 
@@ -378,30 +434,6 @@ void dump_queue(const char *msg)
 ////////////////////////////////////////////////////////////////////////////////
 // Utility routines for the display.
 ////////////////////////////////////////////////////////////////////////////////
-
-//----------------------------------------------------------
-// Function to convert an unsigned long into an array of byte digit values.
-//     buf      address of buffer for byte results
-//     bufsize  size of the 'buf' buffer
-//     value    the unsigned long value to convert
-// The function won't overflow the given buffer, it will truncate at the left.
-//
-// For example, given the value 1234 and a buffer of length 7, will fill the
-// buffer with 0001234.  Given 123456789 it will fill with 3456789.
-//----------------------------------------------------------
-
-void ltobbuff(char *buf, int bufsize, unsigned long value)
-{
-  char *ptr = buf + bufsize - 1;
-
-  for (int i = 0; i < bufsize; ++i)
-  {
-    int rem = value % 10;
-
-    value = value / 10;
-    *ptr-- = char(rem);
-  }
-}
 
 //----------------------------------------------------------
 // Print the frequency on the display with selected colum underlined.
@@ -455,7 +487,7 @@ void print_freq(unsigned long freq, int sel_col, int row)
 ////////////////////////////////////////////////////////////////////////////////
 
 // time when click becomes a "hold click" (milliseconds)
-#define HoldClickTime 700
+#define HoldClickTime 500
 
 // internal variables
 bool re_rotation = false;       // true if rotation occurred while knob down
@@ -577,14 +609,26 @@ void pinB_isr(void)
 
 // address for unsigned long 'frequency'
 const int AddressFreq = 0;
+const int AddressFreqSize = sizeof(AddressFreq);
 
 // address for int 'selected digit'
-const int AddressSelDigit = AddressFreq + sizeof(AddressFreq);
+const int AddressSelDigit = AddressFreq + AddressFreqSize;
+const int AddressSelDigitSize = sizeof(int);
 
 // number of frequency save slots in EEPROM
 const int NumSaveSlots = 10;
-const int SaveSlotBase = AddressSelDigit + sizeof(AddressSelDigit);
 
+const int SaveFreqSize = sizeof(long);
+const int SaveFreqBase = AddressSelDigit + AddressSelDigitSize;
+const int SaveFreqBaseSize = NumSaveSlots * SaveFreqSize;
+
+//also save the offset for each frequency
+const int SaveOffsetSize = sizeof(byte);
+const int SaveOffsetBase = SaveFreqBase + SaveFreqBaseSize;
+const int SaveOffsetBaseSize = NumSaveSlots * SaveOffsetSize;
+
+// free slot address
+const int NextFreeAddress = SaveOffsetBase + SaveOffsetBaseSize;
 
 // save VFO state to EEPROM
 void save_to_eeprom(void)
@@ -623,9 +667,14 @@ void zero_save_slots(void)
 {
   for (int i = 0; i < NumSaveSlots; ++i)
   {
-    int address = SaveSlotBase + i * sizeof(unsigned long);
-    EEPROM.put(address, 0L);
-    Serial.print("Zeroing address "); Serial.println(address);
+    int freq_address = SaveFreqBase + i * SaveFreqSize;
+    int offset_address = SaveOffsetBase + i * SaveOffsetSize;
+
+    EEPROM.put(freq_address, (long) 0L);
+    Serial.print("Zeroing address "); Serial.println(freq_address);
+    
+    EEPROM.put(offset_address, (byte) 0);
+    Serial.print("Zeroing address "); Serial.println(offset_address);
   }
   Serial.println("End of zero_save_slots()");
 }
@@ -659,6 +708,8 @@ void setup(void)
 void show_main_screen(void)
 {
   lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write("Freq:");
   print_freq(VfoFrequency, VfoSelectDigit, 0);
 }
 
@@ -709,7 +760,7 @@ void menu_display(Menu *menu, int slot_num)
   lcd.setCursor(0, 1);
   lcd.setCursor(NUM_COLS - max_len, 1);
   lcd.write(menu->items[slot_num]);
-  Serial.print("Setting cursor to column "); Serial.println(NUM_COLS - max_len);
+  Serial.print("Set cursor to column "); Serial.println(NUM_COLS - max_len);
   Serial.print("item text="); Serial.println(menu->items[slot_num]);
 }
 
@@ -739,11 +790,11 @@ void save_restore_display(Menu *menu, int slot_num)
   char buf[MAX_FREQ_CHARS + 1];
   
   // get saved frequency, convert to a display buffer
-  int address = SaveSlotBase + slot_num * sizeof(unsigned long);
+  int address = SaveFreqBase + slot_num * sizeof(unsigned long);
   unsigned long freq;
 
   EEPROM.get(address, freq);
-  ltobbuff(buf, MAX_FREQ_CHARS, freq);
+  ltochbuff(buf, MAX_FREQ_CHARS, freq);
   buf[MAX_FREQ_CHARS] = 0;
   Serial.print("save_restore_display: freq="); Serial.println(freq);
   Serial.print("save_restore_display: buf="); Serial.write(buf, MAX_FREQ_CHARS);
@@ -766,23 +817,32 @@ void save_restore_display(Menu *menu, int slot_num)
 
 void save_select(Menu *menu, int slot_num)
 {
-  int address = SaveSlotBase + slot_num * sizeof(unsigned long);
+  int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
+  int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
 
   Serial.print("save_select: saving Frequency "); Serial.print(VfoFrequency);
-  Serial.print(" to slot "); Serial.print(slot_num);
-  Serial.print("="); Serial.println(address, HEX);
-  EEPROM.put(address, VfoFrequency);
+  Serial.print(" to slot "); Serial.println(slot_num);
+  
+  EEPROM.put(freq_address, VfoFrequency);
+
+  Serial.print("save_select: saving Offset "); Serial.print(VfoSelectDigit);
+  Serial.print(" to slot "); Serial.println(slot_num);
+  
+  EEPROM.put(offset_address, VfoSelectDigit);
 }
 
 void restore_select(Menu *menu, int slot_num)
 {
   Serial.print("restore_select: slot_num="); Serial.println(slot_num);
-  int address = SaveSlotBase + slot_num * sizeof(unsigned long);
+  int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
+  int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
 
-  EEPROM.get(address, VfoFrequency);
+  EEPROM.get(freq_address, VfoFrequency);
+  EEPROM.get(offset_address, VfoSelectDigit);
+  
   Serial.print("restore_select: restoring frequency "); Serial.print(VfoFrequency);
-  Serial.print(" from slot "); Serial.print(slot_num);
-  Serial.print("="); Serial.println(address, HEX);
+  Serial.print(" and offset "); Serial.print(VfoSelectDigit);
+  Serial.print(" from slot "); Serial.println(slot_num);
 }
 
 //----------------------------------------------------------
@@ -796,7 +856,7 @@ void loop(void)
   int old_position = VfoSelectDigit;
 
   // handle all events in the queue
-  while (queue_len() > 0)
+  while (events_pending() > 0)
   {
     // get next event and handle it
     byte event = pop_event();
