@@ -15,12 +15,12 @@
 #include <EEPROM.h>
 
 
-#define DEBUG   // define if debugging
+//#define DEBUG   // define if debugging
 
 
 // Digital VFO program name & version
 const char *ProgramName = "Digital VFO";
-const char *Version = "0.4";
+const char *Version = "0.5";
 const char *Callsign = "vk4fawr";
 const char *Callsign16 = "vk4fawr         ";
 
@@ -30,10 +30,6 @@ const char *Callsign16 = "vk4fawr         ";
 
 // define one row of blanks
 const char *BlankRow = "                ";
-// check it has the right length
-//#if sizeof(BlankRow) <> NUM_COLS
-//  #error "BlankRow not defined correctly?"
-//#endif
 
 // define data pins we connect to the LCD
 const byte lcd_RS = 7;
@@ -107,8 +103,10 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 // The VFO state variables
 ////////////////////////////////////////////////////////////////////////////////
 
-unsigned long VfoFrequency;   // VFO frequency (Hz)
-byte VfoSelectDigit;          // selected column index, zero at the right
+typedef unsigned long Frequency;
+
+Frequency VfoFrequency;     // VFO frequency (Hz)
+byte VfoSelectDigit;        // selected column index, zero at the right
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -136,7 +134,7 @@ void abort(const char *msg)
     lcd.setCursor(0, 1);
     lcd.write(msg + NUM_COLS);
     delay(2000);
-    
+
     lcd.clear();
     lcd.write("Teensy is paused");
     delay(2000);
@@ -194,10 +192,10 @@ void banner(void)
 }
 
 //----------------------------------------------------------
-// Function to convert an unsigned long into an array of decimal digit values.
+// Function to convert a Frequency into an array of decimal digit values.
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
-//     value    the unsigned long value to convert
+//     value    the Frequency value to convert
 // The function won't overflow the given buffer, it will truncate at the left.
 // Leading zeros are suppressed.
 //
@@ -205,7 +203,7 @@ void banner(void)
 // buffer with "   1234".  Given 123456789 it will fill with "3456789".
 //----------------------------------------------------------
 
-void ltochbuff(char *buf, int bufsize, unsigned long value)
+void ltochbuff(char *buf, int bufsize, Frequency value)
 {
   char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
 
@@ -223,17 +221,17 @@ void ltochbuff(char *buf, int bufsize, unsigned long value)
 }
 
 //----------------------------------------------------------
-// Function to convert an unsigned long into an array of byte digit values.
+// Function to convert a Frequency into an array of byte digit values.
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
-//     value    the unsigned long value to convert
+//     value    the Frequency value to convert
 // The function won't overflow the given buffer, it will truncate at the left.
 //
 // For example, given the value 1234 and a buffer of length 7, will fill the
 // buffer with 0001234.  Given 123456789 it will fill with 3456789.
 //----------------------------------------------------------
 
-void ltobbuff(char *buf, int bufsize, unsigned long value)
+void ltobbuff(char *buf, int bufsize, Frequency value)
 {
   char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
 
@@ -271,7 +269,7 @@ struct Menu
 void show_menu(struct Menu *menu)
 {
   int item_index = 0;
-  
+
   Serial.print("show_menu("); Serial.print(menu->title); Serial.println(")");
   // update the menu display
   Serial.print("Calling menu->display: menu->title=");
@@ -289,7 +287,9 @@ void show_menu(struct Menu *menu)
     {
       // get next event and handle it
       byte event = pop_event();
+#ifdef DEBUG
       Serial.print("show_menu: popped event "); Serial.println(event2display(event));
+#endif
 
       switch (event)
       {
@@ -326,7 +326,7 @@ void show_menu(struct Menu *menu)
           Serial.print("Menu: unrecognized event "); Serial.println(event);
           break;
       }
-      
+
       // update the menu display
       Serial.print("Calling menu->display: menu->title=");
       Serial.print(menu->title);
@@ -445,7 +445,7 @@ void dump_queue(const char *msg)
 // A final "Hz" is written.
 //----------------------------------------------------------
 
-void print_freq(unsigned long freq, int sel_col, int row)
+void print_freq(Frequency freq, int sel_col, int row)
 {
   char buf [MAX_FREQ_CHARS];
   int index = MAX_FREQ_CHARS - sel_col - 1;
@@ -492,7 +492,7 @@ void print_freq(unsigned long freq, int sel_col, int row)
 // internal variables
 bool re_rotation = false;       // true if rotation occurred while knob down
 bool re_down = false;           // true while knob is down
-unsigned long re_down_time = 0; // milliseconds when knob is pressed down
+Frequency re_down_time = 0; // milliseconds when knob is pressed down
 
 // expecting rising edge on pinA - at detent
 volatile byte aFlag = 0;
@@ -607,7 +607,7 @@ void pinB_isr(void)
 // Code to save/restore in EEPROM.
 ////////////////////////////////////////////////////////////////////////////////
 
-// address for unsigned long 'frequency'
+// address for Frequency 'frequency'
 const int AddressFreq = 0;
 const int AddressFreqSize = sizeof(AddressFreq);
 
@@ -644,12 +644,78 @@ void restore_from_eeprom(void)
   EEPROM.get(AddressSelDigit, VfoSelectDigit);
 }
 
+// given slot number, return freq/offset
+void get_slot(int slot_num, Frequency &freq, byte &offset)
+{
+  Serial.print("get_slot: slot_num="); Serial.println(slot_num);
+
+  int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
+  int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
+
+  Serial.print("SaveFreqBase="); Serial.print(SaveFreqBase);
+  Serial.print(", freq_address="); Serial.println(freq_address);
+
+  EEPROM.get(freq_address, freq);
+
+  Serial.print("SaveOffsetBase="); Serial.print(SaveOffsetBase);
+  Serial.print(", offset_address="); Serial.println(offset_address);
+
+  EEPROM.get(offset_address, offset);
+}
+
+// put frequency/offset into given slot number
+void put_slot(int slot_num, Frequency freq, byte offset)
+{
+  Serial.print("put_slot: slot_num="); Serial.println(slot_num);
+
+  int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
+  int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
+
+  Serial.print("SaveFreqBase="); Serial.print(SaveFreqBase);
+  Serial.print(", freq_address="); Serial.println(freq_address);
+
+  EEPROM.put(freq_address, freq);
+
+  Serial.print("SaveOffsetBase="); Serial.print(SaveOffsetBase);
+  Serial.print(", offset_address="); Serial.println(offset_address);
+
+  EEPROM.put(offset_address, offset);
+}
+
+// print all EEPROM saved data to console
+void dump_eeprom()
+{
+  Frequency ulong;
+  byte offset;
+
+  EEPROM.get(AddressFreq, ulong);
+  EEPROM.get(AddressSelDigit, offset);
+  Serial.println("=================================================");
+  Serial.print("dump_eeprom: VfoFrequency="); Serial.print(ulong);
+  Serial.print(", AddressSelDigit="); Serial.println(offset);
+
+  for (int i = 0; i < NumSaveSlots; ++i)
+  {
+    get_slot(i, ulong, offset);
+    Serial.print(i); Serial.print(": ");
+    Serial.print(ulong); Serial.print(", ");
+    Serial.println(offset);
+  }
+
+  Serial.println("=================================================");
+}
+
+void get_vfo_freq_offset(Frequency &freq, byte &offset)
+{
+  EEPROM.get(AddressFreq, freq);
+  EEPROM.get(AddressSelDigit, offset);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Code to handle the DDS-60
 ////////////////////////////////////////////////////////////////////////////////
 
-void update_dds60(unsigned long freq)
+void update_dds60(Frequency freq)
 {
 
 }
@@ -663,20 +729,16 @@ void update_dds60(unsigned long freq)
 // The standard Arduino setup() function.
 //----------------------------------------------------------
 
-void zero_save_slots(void)
+void zero_slots(void)
 {
+  Frequency freq = 0L;
+  byte offset = 0;
+
   for (int i = 0; i < NumSaveSlots; ++i)
   {
-    int freq_address = SaveFreqBase + i * SaveFreqSize;
-    int offset_address = SaveOffsetBase + i * SaveOffsetSize;
-
-    EEPROM.put(freq_address, (long) 0L);
-    Serial.print("Zeroing address "); Serial.println(freq_address);
-    
-    EEPROM.put(offset_address, (byte) 0);
-    Serial.print("Zeroing address "); Serial.println(offset_address);
+    put_slot(i, freq, offset);
   }
-  Serial.println("End of zero_save_slots()");
+  Serial.println("End of zero_slots()");
 }
 
 void setup(void)
@@ -690,8 +752,8 @@ void setup(void)
   lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
 
   restore_from_eeprom();
-//  zero_save_slots();
-//  Serial.println("After zero_save_slots()");
+//  zero_slots();
+//  Serial.println("After zero_slots()");
 
   // set up the rotary encoder
   re_setup(VfoSelectDigit);
@@ -700,7 +762,10 @@ void setup(void)
 #ifndef DEBUG
   banner();
 #endif
-  
+
+  // dump EEPROM values
+  dump_eeprom();
+
   // get going
   show_main_screen();
 }
@@ -733,7 +798,7 @@ Menu restore_menu = {"Restore", save_restore_display, restore_select,
 void menu_display(Menu *menu, int slot_num)
 {
   Serial.println("menu_display() called");
-  
+
   // figure out max length of item strings
   int max_len = 0;
 
@@ -788,12 +853,13 @@ void save_restore_display(Menu *menu, int slot_num)
   // max length of item strings is "0: xxxxxxxxHz"
   const int max_len = 13;
   char buf[MAX_FREQ_CHARS + 1];
-  
-  // get saved frequency, convert to a display buffer
-  int address = SaveFreqBase + slot_num * sizeof(unsigned long);
-  unsigned long freq;
 
-  EEPROM.get(address, freq);
+  // get saved frequency, convert to a display buffer
+  Frequency freq = 0;
+  byte offset = 0;
+
+  get_slot(slot_num, freq, offset);
+
   ltochbuff(buf, MAX_FREQ_CHARS, freq);
   buf[MAX_FREQ_CHARS] = 0;
   Serial.print("save_restore_display: freq="); Serial.println(freq);
@@ -804,7 +870,7 @@ void save_restore_display(Menu *menu, int slot_num)
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.write(menu->title);
-  
+
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
   lcd.write(BlankRow);
@@ -815,31 +881,28 @@ void save_restore_display(Menu *menu, int slot_num)
   lcd.write("Hz");
 }
 
+// clear display and delay a little
+void action_flash(void)
+{
+  lcd.clear();
+  delay(200);
+}
+
 void save_select(Menu *menu, int slot_num)
 {
-  int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
-  int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
+  put_slot(slot_num, VfoFrequency, VfoSelectDigit);
 
-  Serial.print("save_select: saving Frequency "); Serial.print(VfoFrequency);
-  Serial.print(" to slot "); Serial.println(slot_num);
-  
-  EEPROM.put(freq_address, VfoFrequency);
-
-  Serial.print("save_select: saving Offset "); Serial.print(VfoSelectDigit);
-  Serial.print(" to slot "); Serial.println(slot_num);
-  
-  EEPROM.put(offset_address, VfoSelectDigit);
+  // display an 'action flash'
+  action_flash();
+  save_restore_display(menu, slot_num);
 }
 
 void restore_select(Menu *menu, int slot_num)
 {
   Serial.print("restore_select: slot_num="); Serial.println(slot_num);
-  int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
-  int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
 
-  EEPROM.get(freq_address, VfoFrequency);
-  EEPROM.get(offset_address, VfoSelectDigit);
-  
+  get_slot(slot_num, VfoFrequency, VfoSelectDigit);
+
   Serial.print("restore_select: restoring frequency "); Serial.print(VfoFrequency);
   Serial.print(" and offset "); Serial.print(VfoSelectDigit);
   Serial.print(" from slot "); Serial.println(slot_num);
@@ -852,7 +915,7 @@ void restore_select(Menu *menu, int slot_num)
 void loop(void)
 {
   // remember old values, update screen if changed
-  unsigned long old_freq = VfoFrequency;
+  Frequency old_freq = VfoFrequency;
   int old_position = VfoSelectDigit;
 
   // handle all events in the queue
@@ -860,7 +923,9 @@ void loop(void)
   {
     // get next event and handle it
     byte event = pop_event();
+#ifdef DEBUG
     Serial.print("loop: popped event "); Serial.println(event2display(event));
+#endif
 
     switch (event)
     {
