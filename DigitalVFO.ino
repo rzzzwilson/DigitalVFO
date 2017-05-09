@@ -15,12 +15,12 @@
 #include <EEPROM.h>
 
 
-//#define DEBUG   // define if debugging
+#define DEBUG   // define if debugging
 
 
 // Digital VFO program name & version
-const char *ProgramName = "Digital VFO";
-const char *Version = "0.5";
+const char *ProgramName = "DigitalVFO";
+const char *Version = "0.6";
 const char *Callsign = "vk4fawr";
 const char *Callsign16 = "vk4fawr         ";
 
@@ -100,13 +100,16 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 #define vfo_HoldClick 6
 
 ////////////////////////////////////////////////////////////////////////////////
-// The VFO state variables
+// The VFO state variables and typedefs
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef unsigned long Frequency;
-
 Frequency VfoFrequency;     // VFO frequency (Hz)
-byte VfoSelectDigit;        // selected column index, zero at the right
+
+typedef int SelOffset;
+SelOffset VfoSelectDigit;   // selected column index, zero at the right
+
+typedef byte VFOEvent;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,26 +120,48 @@ byte VfoSelectDigit;        // selected column index, zero at the right
 // Abort the program.
 // Tries to tell the world what went wrong, then just loops.
 //     msg  address of error string
+// Only first 32 chars of message is displayed.
 //----------------------------------------------------------
 
 void abort(const char *msg)
 {
+  char buf[NUM_COLS*2+1];
+  char *ptr = buf;
+  
   // print error on console (maybe)
   Serial.println(msg);
   Serial.println("Teensy is paused!");
+
+  // truncate/pad message to 32 chars
+  for (int i = 0; i < NUM_COLS*2; ++i)
+    *ptr++ = ' ';
+  *ptr = '\0';
+  Serial.print("buf='"); Serial.print(buf); Serial.println("'");
+  
+  strncpy(buf, msg, NUM_COLS*2);
+  Serial.print("buf='"); Serial.print(buf); Serial.println("'");
+  if (strlen(msg) < NUM_COLS*2)
+    strncpy(buf + strlen(msg), "                                ", NUM_COLS*2 - strlen(msg));
+  Serial.print("buf='"); Serial.print(buf); Serial.println("'");
 
   // show what we can on the display, forever
   while (1)
   {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.write(msg);
+    lcd.write(buf);
     lcd.setCursor(0, 1);
-    lcd.write(msg + NUM_COLS);
+    lcd.write(buf + NUM_COLS);
     delay(2000);
 
     lcd.clear();
-    lcd.write("Teensy is paused");
+    lcd.setCursor(0, 0);
+    lcd.write(" ");   // padding to centre name+version
+    lcd.write(ProgramName);
+    lcd.write(" ");
+    lcd.write(Version);
+    lcd.setCursor(0, 1);
+    lcd.write("   is paused");
     delay(2000);
   }
 }
@@ -145,8 +170,7 @@ void abort(const char *msg)
 // Convert an event number to a display string
 //----------------------------------------------------------
 
-#ifdef DEBUG
-const char * event2display(byte event)
+const char * event2display(VFOEvent event)
 {
   switch (event)
   {
@@ -160,7 +184,6 @@ const char * event2display(byte event)
     default:            return "UNKNOWN!";
   }
 }
-#endif
 
 // display a simple banner
 void banner(void)
@@ -270,12 +293,7 @@ void show_menu(struct Menu *menu)
 {
   int item_index = 0;
 
-  Serial.print("show_menu("); Serial.print(menu->title); Serial.println(")");
   // update the menu display
-  Serial.print("Calling menu->display: menu->title=");
-  Serial.print(menu->title);
-  Serial.print(", item_index=");
-  Serial.println(item_index);
   menu->display(menu, item_index);
 
   flush_events();
@@ -287,9 +305,6 @@ void show_menu(struct Menu *menu)
     {
       // get next event and handle it
       byte event = pop_event();
-#ifdef DEBUG
-      Serial.print("show_menu: popped event "); Serial.println(event2display(event));
-#endif
 
       switch (event)
       {
@@ -328,10 +343,6 @@ void show_menu(struct Menu *menu)
       }
 
       // update the menu display
-      Serial.print("Calling menu->display: menu->title=");
-      Serial.print(menu->title);
-      Serial.print(", item_index=");
-      Serial.println(item_index);
       menu->display(menu, item_index);
     }
   }
@@ -345,11 +356,11 @@ void show_menu(struct Menu *menu)
 
 #define QueueLength 10
 
-byte event_queue[QueueLength];
+VFOEvent event_queue[QueueLength];
 int queue_fore = 0;   // fore pointer into circular buffer
 int queue_aft = 0;    // aft pointer into circular buffer
 
-void push_event(byte event)
+void push_event(VFOEvent event)
 {
   // put new event into next empty slot
   event_queue[queue_fore] = event;
@@ -367,7 +378,7 @@ void push_event(byte event)
   }
 }
 
-byte pop_event(void)
+VFOEvent pop_event(void)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
@@ -377,7 +388,7 @@ byte pop_event(void)
     return vfo_None;
 
   // get next event
-  byte event = event_queue[queue_aft];
+  VFOEvent event = event_queue[queue_aft];
 
   // mkove aft pointer up one slot, wrap if necessary
   ++queue_aft;
@@ -417,15 +428,21 @@ void dump_queue(const char *msg)
   // Must protect from RE code fiddling with queue
   noInterrupts();
 
+  Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
   Serial.print("Queue: "); Serial.println(msg);
   for (int i = 0; i < QueueLength; ++i)
   {
-    Serial.print(" "); Serial.print(event_queue[i]);
+    VFOEvent event = event_queue[i];
+    
+    Serial.print("  ");
+    Serial.print(event);
+    Serial.print(" -> ");
+    Serial.println(event2display(event));
   }
-  Serial.println("");
   Serial.print("Queue length="); Serial.println(events_pending());
   Serial.print("queue_aft="); Serial.print(queue_aft);
   Serial.print(", queue_fore="); Serial.println(queue_fore);
+  Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
 
   interrupts();
 }
@@ -536,12 +553,10 @@ void pinPush_isr(void)
       if (push_time < HoldClickTime)
       {
         push_event(vfo_Click);
-        Serial.println("pinPush_isr pushed vfo_Click to queue");
       }
       else
       {
         push_event(vfo_HoldClick);
-        Serial.println("pinPush_isr pushed vfo_HoldClick to queue");
       }
     }
   }
@@ -562,7 +577,6 @@ void pinA_isr(void)
     else
     {
       push_event(vfo_RLeft);
-      Serial.println("pinA_isr pushed vfo_RLeft to queue");
     }
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
@@ -584,13 +598,11 @@ void pinB_isr(void)
     if (re_down)
     {
       push_event(vfo_DnRRight);
-      Serial.println("pinB_isr pushed vfo_DnRRight to queue");
       re_rotation = true;
     }
     else
     {
       push_event(vfo_RRight);
-      Serial.println("pinB_isr pushed vfo_RRight to queue");
     }
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
@@ -623,7 +635,7 @@ const int SaveFreqBase = AddressSelDigit + AddressSelDigitSize;
 const int SaveFreqBaseSize = NumSaveSlots * SaveFreqSize;
 
 //also save the offset for each frequency
-const int SaveOffsetSize = sizeof(byte);
+const int SaveOffsetSize = sizeof(SelOffset);
 const int SaveOffsetBase = SaveFreqBase + SaveFreqBaseSize;
 const int SaveOffsetBaseSize = NumSaveSlots * SaveOffsetSize;
 
@@ -645,40 +657,22 @@ void restore_from_eeprom(void)
 }
 
 // given slot number, return freq/offset
-void get_slot(int slot_num, Frequency &freq, byte &offset)
+void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
 {
-  Serial.print("get_slot: slot_num="); Serial.println(slot_num);
-
   int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
   int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
 
-  Serial.print("SaveFreqBase="); Serial.print(SaveFreqBase);
-  Serial.print(", freq_address="); Serial.println(freq_address);
-
   EEPROM.get(freq_address, freq);
-
-  Serial.print("SaveOffsetBase="); Serial.print(SaveOffsetBase);
-  Serial.print(", offset_address="); Serial.println(offset_address);
-
   EEPROM.get(offset_address, offset);
 }
 
 // put frequency/offset into given slot number
-void put_slot(int slot_num, Frequency freq, byte offset)
+void put_slot(int slot_num, Frequency freq, SelOffset offset)
 {
-  Serial.print("put_slot: slot_num="); Serial.println(slot_num);
-
   int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
   int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
 
-  Serial.print("SaveFreqBase="); Serial.print(SaveFreqBase);
-  Serial.print(", freq_address="); Serial.println(freq_address);
-
   EEPROM.put(freq_address, freq);
-
-  Serial.print("SaveOffsetBase="); Serial.print(SaveOffsetBase);
-  Serial.print(", offset_address="); Serial.println(offset_address);
-
   EEPROM.put(offset_address, offset);
 }
 
@@ -686,7 +680,7 @@ void put_slot(int slot_num, Frequency freq, byte offset)
 void dump_eeprom()
 {
   Frequency ulong;
-  byte offset;
+  SelOffset offset;
 
   EEPROM.get(AddressFreq, ulong);
   EEPROM.get(AddressSelDigit, offset);
@@ -705,7 +699,7 @@ void dump_eeprom()
   Serial.println("=================================================");
 }
 
-void get_vfo_freq_offset(Frequency &freq, byte &offset)
+void get_vfo_freq_offset(Frequency &freq, SelOffset &offset)
 {
   EEPROM.get(AddressFreq, freq);
   EEPROM.get(AddressSelDigit, offset);
@@ -731,14 +725,18 @@ void update_dds60(Frequency freq)
 
 void zero_slots(void)
 {
-  Frequency freq = 0L;
-  byte offset = 0;
+  Frequency zero_freq = 0L;
+  SelOffset zero_offset = 0;
+
+  // zero the frequency+selected values
+  VfoFrequency = MIN_FREQ;
+  VfoSelectDigit = 0;
+  save_to_eeprom();
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
-    put_slot(i, freq, offset);
+    put_slot(i, zero_freq, zero_offset);
   }
-  Serial.println("End of zero_slots()");
 }
 
 void setup(void)
@@ -751,9 +749,8 @@ void setup(void)
   lcd.noCursor();
   lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
 
+  // get state back from EEPROM
   restore_from_eeprom();
-//  zero_slots();
-//  Serial.println("After zero_slots()");
 
   // set up the rotary encoder
   re_setup(VfoSelectDigit);
@@ -762,9 +759,11 @@ void setup(void)
 #ifndef DEBUG
   banner();
 #endif
-
+  
   // dump EEPROM values
+#ifdef DEBUG
   dump_eeprom();
+#endif
 
   // we sometimes see random events on powerup, flush them here
   flush_events();
@@ -803,24 +802,16 @@ Menu delete_menu = {menu_items[2], savresdel_display, delete_select,
 
 void menu_display(Menu *menu, int slot_num)
 {
-  Serial.println("menu_display() called");
-
   // figure out max length of item strings
   int max_len = 0;
 
-  Serial.print("menu->num_items="); Serial.println(menu->num_items);
   for (int i = 0; i < menu->num_items; ++ i)
   {
     int new_len = strlen(menu->items[i]);
 
     if (new_len > max_len)
         max_len = new_len;
-
-    Serial.print("i="); Serial.print(i);
-    Serial.print(", new_len="); Serial.print(new_len);
-    Serial.print(", max_len="); Serial.println(max_len);
   }
-  Serial.print("Max item len="); Serial.println(max_len);
 
   // write menu title on upper row
   lcd.clear();
@@ -831,16 +822,11 @@ void menu_display(Menu *menu, int slot_num)
   lcd.setCursor(0, 1);
   lcd.setCursor(NUM_COLS - max_len, 1);
   lcd.write(menu->items[slot_num]);
-  Serial.print("Set cursor to column "); Serial.println(NUM_COLS - max_len);
-  Serial.print("item text="); Serial.println(menu->items[slot_num]);
 }
 
 void menu_select(Menu *menu, int slot_num)
 {
-  Serial.print("menu_select: slot_num="); Serial.println(slot_num);
   const char *action_text = menu->items[slot_num];
-
-  Serial.print("action_text="); Serial.println(action_text);
 
   if (strcmp(action_text, menu->items[0]) == 0)
   {
@@ -864,27 +850,20 @@ void menu_select(Menu *menu, int slot_num)
   }
 }
 
-// draw the Save or Restore screen
+// draw the Save, Restore or Delete screen
 void savresdel_display(Menu *menu, int slot_num)
 {
-  Serial.print("savresdel_display: menu="); Serial.println(menu->title);
-  Serial.print("savresdel_display: slot_num="); Serial.println(slot_num);
+  Frequency freq;
+  SelOffset offset;
 
-  // max length of item strings is "0: xxxxxxxxHz"
+  // max length of item strings is "9: xxxxxxxxHz" - 13 chars
   const int max_len = 13;
   char buf[MAX_FREQ_CHARS + 1];
-
-  // get saved frequency, convert to a display buffer
-  Frequency freq = 0;
-  byte offset = 0;
 
   get_slot(slot_num, freq, offset);
 
   ltochbuff(buf, MAX_FREQ_CHARS, freq);
   buf[MAX_FREQ_CHARS] = 0;
-  Serial.print("savresdel_display: freq="); Serial.println(freq);
-  Serial.print("savresdel_display: buf="); Serial.write(buf, MAX_FREQ_CHARS);
-  Serial.println("");
 
   // write menu title on first row
   lcd.clear();
@@ -921,36 +900,32 @@ void action_flash(void)
 
 void save_select(Menu *menu, int slot_num)
 {
+  // display an 'action flash'
+  action_flash();
+  
   put_slot(slot_num, VfoFrequency, VfoSelectDigit);
 
-  // display an 'action flash' and then do it
-  action_flash();
   savresdel_display(menu, slot_num);
 }
 
 void restore_select(Menu *menu, int slot_num)
 {
-  Serial.print("restore_select: slot_num="); Serial.println(slot_num);
-
-  // display an 'action flash' and then do it
+  // display an 'action flash'
   action_flash();
+  
   get_slot(slot_num, VfoFrequency, VfoSelectDigit);
 
-  Serial.print("restore_select: restoring frequency "); Serial.print(VfoFrequency);
-  Serial.print(" and offset "); Serial.print(VfoSelectDigit);
-  Serial.print(" from slot "); Serial.println(slot_num);
+  savresdel_display(menu, slot_num);
 }
+
 void delete_select(Menu *menu, int slot_num)
 {
-  Serial.print("delete_select: slot_num="); Serial.println(slot_num);
-
-  // display an 'action flash' and then do it
+  // display an 'action flash'
   action_flash();
+  
   put_slot(slot_num, 0L, 0);
 
-  Serial.print("delete_select: deleting frequency "); Serial.print(VfoFrequency);
-  Serial.print(" and offset "); Serial.print(VfoSelectDigit);
-  Serial.print(" from slot "); Serial.println(slot_num);
+  savresdel_display(menu, slot_num);
 }
 
 //----------------------------------------------------------
@@ -967,10 +942,7 @@ void loop(void)
   while (events_pending() > 0)
   {
     // get next event and handle it
-    byte event = pop_event();
-#ifdef DEBUG
-    Serial.print("loop: popped event "); Serial.println(event2display(event));
-#endif
+    VFOEvent event = pop_event();
 
     switch (event)
     {
@@ -988,7 +960,7 @@ void loop(void)
         break;
       case vfo_DnRLeft:
         Serial.println("vfo_DnRLeft");
-        VfoSelectDigit += 1;
+        VfoSelectDigit += 1;        
         if (VfoSelectDigit >= MAX_FREQ_CHARS)
           VfoSelectDigit = MAX_FREQ_CHARS - 1;
         break;
@@ -1004,7 +976,6 @@ void loop(void)
       case vfo_HoldClick:
         Serial.println("Got vfo_HoldClick: calling show_menu()");
         show_menu(&main_menu);
-        Serial.println("After show_menu()");
         dump_queue("After show_menu()");
         show_main_screen();
         break;
