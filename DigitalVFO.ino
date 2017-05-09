@@ -877,6 +877,12 @@ void save_restore_display(Menu *menu, int slot_num)
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
   lcd.write(BlankRow);
+  // show '*' if slot frequency equal to current
+  if (freq == VfoFrequency)
+  {
+    lcd.setCursor(0, 1);
+    lcd.write("*");
+  }
   lcd.setCursor(NUM_COLS - max_len, 1);
   lcd.write(slot_num + '0');
   lcd.write(": ");
