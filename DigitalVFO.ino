@@ -766,6 +766,9 @@ void setup(void)
   // dump EEPROM values
   dump_eeprom();
 
+  // we sometimes see random events on powerup, flush them here
+  flush_events();
+
   // get going
   show_main_screen();
 }
