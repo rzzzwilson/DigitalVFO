@@ -785,17 +785,20 @@ void show_main_screen(void)
 // Define the menus to be used, plus handler code
 //-----
 
-const char *menu_items[2] = {"Save", "Restore"};
+const char *menu_items[] = {"Save slot", "Restore slot", "Delete slot"};
 #define NumMainMenuItems (sizeof(menu_items)/sizeof(const char *))
 
 Menu main_menu = {"Menu", menu_display, menu_select,
                   NumMainMenuItems, menu_items};
 
-Menu save_menu = {"Save", save_restore_display, save_select,
+Menu save_menu = {menu_items[0], savresdel_display, save_select,
                   NumSaveSlots, NULL};
 
-Menu restore_menu = {"Restore", save_restore_display, restore_select,
+Menu restore_menu = {menu_items[1], savresdel_display, restore_select,
                      NumSaveSlots, NULL};
+
+Menu delete_menu = {menu_items[2], savresdel_display, delete_select,
+                    NumSaveSlots, NULL};
 
 
 void menu_display(Menu *menu, int slot_num)
@@ -837,21 +840,35 @@ void menu_select(Menu *menu, int slot_num)
   Serial.print("menu_select: slot_num="); Serial.println(slot_num);
   const char *action_text = menu->items[slot_num];
 
-  if (strcmp(action_text, "Save") == 0)
+  Serial.print("action_text="); Serial.println(action_text);
+
+  if (strcmp(action_text, menu->items[0]) == 0)
   {
       show_menu(&save_menu);
   }
-  else if (strcmp(action_text, "Restore") == 0)
+  else if (strcmp(action_text, menu->items[1]) == 0)
   {
       show_menu(&restore_menu);
+  }
+  else if (strcmp(action_text, menu->items[2]) == 0)
+  {
+      show_menu(&delete_menu);
+  }
+  else
+  {
+    char msg[32+1];
+
+    strcpy(msg, "Unknown: ");
+    strcpy(msg+strlen("Unknown: "), action_text);
+    abort(msg);
   }
 }
 
 // draw the Save or Restore screen
-void save_restore_display(Menu *menu, int slot_num)
+void savresdel_display(Menu *menu, int slot_num)
 {
-  Serial.print("save_restore_display: menu="); Serial.println(menu->title);
-  Serial.print("save_restore_display: slot_num="); Serial.println(slot_num);
+  Serial.print("savresdel_display: menu="); Serial.println(menu->title);
+  Serial.print("savresdel_display: slot_num="); Serial.println(slot_num);
 
   // max length of item strings is "0: xxxxxxxxHz"
   const int max_len = 13;
@@ -865,8 +882,8 @@ void save_restore_display(Menu *menu, int slot_num)
 
   ltochbuff(buf, MAX_FREQ_CHARS, freq);
   buf[MAX_FREQ_CHARS] = 0;
-  Serial.print("save_restore_display: freq="); Serial.println(freq);
-  Serial.print("save_restore_display: buf="); Serial.write(buf, MAX_FREQ_CHARS);
+  Serial.print("savresdel_display: freq="); Serial.println(freq);
+  Serial.print("savresdel_display: buf="); Serial.write(buf, MAX_FREQ_CHARS);
   Serial.println("");
 
   // write menu title on first row
@@ -890,29 +907,48 @@ void save_restore_display(Menu *menu, int slot_num)
   lcd.write("Hz");
 }
 
-// clear display and delay a little
+// show that *something* happened
 void action_flash(void)
 {
-  lcd.clear();
-  delay(200);
+  lcd.noDisplay();
+  delay(100);
+  lcd.display();
+  delay(100);
+  lcd.noDisplay();
+  delay(100);
+  lcd.display();
 }
 
 void save_select(Menu *menu, int slot_num)
 {
   put_slot(slot_num, VfoFrequency, VfoSelectDigit);
 
-  // display an 'action flash'
+  // display an 'action flash' and then do it
   action_flash();
-  save_restore_display(menu, slot_num);
+  savresdel_display(menu, slot_num);
 }
 
 void restore_select(Menu *menu, int slot_num)
 {
   Serial.print("restore_select: slot_num="); Serial.println(slot_num);
 
+  // display an 'action flash' and then do it
+  action_flash();
   get_slot(slot_num, VfoFrequency, VfoSelectDigit);
 
   Serial.print("restore_select: restoring frequency "); Serial.print(VfoFrequency);
+  Serial.print(" and offset "); Serial.print(VfoSelectDigit);
+  Serial.print(" from slot "); Serial.println(slot_num);
+}
+void delete_select(Menu *menu, int slot_num)
+{
+  Serial.print("delete_select: slot_num="); Serial.println(slot_num);
+
+  // display an 'action flash' and then do it
+  action_flash();
+  put_slot(slot_num, 0L, 0);
+
+  Serial.print("delete_select: deleting frequency "); Serial.print(VfoFrequency);
   Serial.print(" and offset "); Serial.print(VfoSelectDigit);
   Serial.print(" from slot "); Serial.println(slot_num);
 }
