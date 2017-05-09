@@ -765,11 +765,11 @@ void setup(void)
   dump_eeprom();
 #endif
 
-  // we sometimes see random events on powerup, flush them here
-  flush_events();
-
   // get going
   show_main_screen();
+
+  // we sometimes see random events on powerup, flush them here
+  flush_events();
 }
 
 void show_main_screen(void)
@@ -951,10 +951,14 @@ void loop(void)
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MIN_FREQ)
           VfoFrequency = MIN_FREQ;
-        break;
+        if (VfoFrequency > MAX_FREQ)
+          VfoFrequency = MAX_FREQ;
+       break;
       case vfo_RRight:
         Serial.println("vfo_RRight");
         VfoFrequency += offset2bump[VfoSelectDigit];
+        if (VfoFrequency < MIN_FREQ)
+          VfoFrequency = MIN_FREQ;
         if (VfoFrequency > MAX_FREQ)
           VfoFrequency = MAX_FREQ;
         break;
