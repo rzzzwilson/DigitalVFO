@@ -23,7 +23,7 @@ left or the right.  This will decrease and increase respectively the frequency
 digit under the cursor.  Any overflow or underflow of the selected digit will
 propagate to the left only.
 
-The selected frequency digit will be moved left or right by pressing in and
+The selection cursor will be moved left or right by pressing in and
 holding the rotary encoder knob and rotating the knob to the left or right
 while pressed.
 
