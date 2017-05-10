@@ -15,6 +15,7 @@
 #include <EEPROM.h>
 
 
+//#define RESET   // define if resetting all EEPROM data
 #define DEBUG   // define if debugging
 
 
@@ -44,7 +45,7 @@ const int re_pinA = 2;     // encoder A pin
 const int re_pinB = 3;     // encoder B pin
 const int re_pinPush = 4;  // encoder pushbutton pin
 
-// define Teensy pin controlling contrast
+// define pin controlling contrast
 const byte mc_Contrast = 6;
 
 // max and min frequency showable
@@ -102,6 +103,10 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 #define vfo_Click     5
 #define vfo_HoldClick 6
 
+// default LCD contrast
+const int DefaultLcdContrast = 50;
+
+
 ////////////////////////////////////////////////////////////////////////////////
 // The VFO state variables and typedefs
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,6 +118,8 @@ typedef int SelOffset;
 SelOffset VfoSelectDigit;   // selected column index, zero at the right
 
 typedef byte VFOEvent;
+
+int LcdContrast;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -630,11 +637,15 @@ const int AddressFreqSize = sizeof(AddressFreq);
 const int AddressSelDigit = AddressFreq + AddressFreqSize;
 const int AddressSelDigitSize = sizeof(int);
 
+// address for byte 'contrast'
+const int AddressContrast = AddressSelDigit + AddressSelDigitSize;
+const int AddressContrastSize = sizeof(LcdContrast);
+
 // number of frequency save slots in EEPROM
 const int NumSaveSlots = 10;
 
 const int SaveFreqSize = sizeof(long);
-const int SaveFreqBase = AddressSelDigit + AddressSelDigitSize;
+const int SaveFreqBase = AddressContrast + AddressContrastSize;
 const int SaveFreqBaseSize = NumSaveSlots * SaveFreqSize;
 
 //also save the offset for each frequency
@@ -650,6 +661,7 @@ void save_to_eeprom(void)
 {
   EEPROM.put(AddressFreq, VfoFrequency);
   EEPROM.put(AddressSelDigit, VfoSelectDigit);
+  EEPROM.put(AddressContrast, LcdContrast);
 }
 
 // restore VFO state from EEPROM
@@ -657,6 +669,7 @@ void restore_from_eeprom(void)
 {
   EEPROM.get(AddressFreq, VfoFrequency);
   EEPROM.get(AddressSelDigit, VfoSelectDigit);
+  EEPROM.get(AddressContrast, LcdContrast);
 }
 
 // given slot number, return freq/offset
@@ -684,17 +697,20 @@ void dump_eeprom()
 {
   Frequency ulong;
   SelOffset offset;
+  int contrast;
 
   EEPROM.get(AddressFreq, ulong);
   EEPROM.get(AddressSelDigit, offset);
+  EEPROM.get(AddressContrast, contrast);
   Serial.println("=================================================");
-  Serial.print("dump_eeprom: VfoFrequency="); Serial.print(ulong);
-  Serial.print(", AddressSelDigit="); Serial.println(offset);
+  Serial.print("dump_eeprom: VfoFrequency="); Serial.println(ulong);
+  Serial.print("             AddressSelDigit="); Serial.println(offset);
+  Serial.print("             LcdContrast="); Serial.println(contrast);
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
     get_slot(i, ulong, offset);
-    Serial.print(i); Serial.print(": ");
+    Serial.print("Slot "); Serial.print(i); Serial.print(": ");
     Serial.print(ulong); Serial.print(", ");
     Serial.println(offset);
   }
@@ -734,6 +750,8 @@ void zero_slots(void)
   // zero the frequency+selected values
   VfoFrequency = MIN_FREQ;
   VfoSelectDigit = 0;
+  LcdContrast = DefaultLcdContrast;
+  
   save_to_eeprom();
 
   for (int i = 0; i < NumSaveSlots; ++i)
@@ -746,6 +764,11 @@ void setup(void)
 {
   Serial.begin(115200);
 
+#ifdef RESET
+  zero_slots();
+  Serial.println("All EEPROM data reset");
+#endif
+
   // initialize the display
   lcd.begin(NUM_COLS, NUM_COLS);      // define display size
   lcd.clear();
@@ -754,7 +777,7 @@ void setup(void)
 
   // initialize contrast control
   pinMode(mc_Contrast, OUTPUT);
-  analogWrite(mc_Contrast, 75);
+  analogWrite(mc_Contrast, DefaultLcdContrast);
 
   // get state back from EEPROM
   restore_from_eeprom();
@@ -765,7 +788,12 @@ void setup(void)
   // show program name and version number
 #ifndef DEBUG
   banner();
+  if (pop_event() == vfo_HoldClick)
+    Serial.println("Would reset here");
 #endif
+  
+  // we sometimes see random events on powerup, flush them here
+  flush_events();
   
   // dump EEPROM values
 #ifdef DEBUG
@@ -806,12 +834,17 @@ Menu restore_menu = {menu_items[1], savresdel_display, restore_select,
 Menu delete_menu = {menu_items[2], savresdel_display, delete_select,
                     NumSaveSlots, NULL};
 
-//const char *settings_items[] = {"Contrast"};
-//#define NumSettingsMenuItems (sizeof(settings_items)/sizeof(const char *))
-//
-//Menu settings_menu = {menu_items[3], settings_display, settings_select,
-//                      NumSettingsMenuItems, settings_items};
+const char *settings_items[] = {"Brightness", "Contrast"};
+#define NumSettingsMenuItems (sizeof(settings_items)/sizeof(const char *))
 
+Menu settings_menu = {menu_items[3], menu_display, settings_select,
+                      NumSettingsMenuItems, settings_items};
+
+const char *contrast_items[] = {"Decrease", "Increase"};
+#define NumContrastMenuItems (sizeof(settings_items)/sizeof(const char *))
+
+Menu contrast_menu = {settings_items[1], menu_display, contrast_select,
+                      NumContrastMenuItems, contrast_items};
 
 void menu_display(Menu *menu, int slot_num)
 {
@@ -852,6 +885,10 @@ void menu_select(Menu *menu, int slot_num)
   else if (strcmp(action_text, menu->items[2]) == 0)
   {
       show_menu(&delete_menu);
+  }
+  else if (strcmp(action_text, menu->items[3]) == 0)
+  {
+      show_menu(&settings_menu);
   }
   else
   {
@@ -941,6 +978,30 @@ void delete_select(Menu *menu, int slot_num)
   savresdel_display(menu, slot_num);
 }
 
+void settings_select(Menu *menu, int slot_num)
+{
+  Serial.print("settings_select() called, slot_num="); Serial.println(slot_num);
+  show_menu(&contrast_menu);
+}
+
+void contrast_select(Menu *menu, int slot_num)
+{
+  if (slot_num == 0)
+      LcdContrast += 5;
+  else if (slot_num == 1)
+      LcdContrast -= 5;
+  else
+    abort("Bad slot numvber");
+
+  if (LcdContrast < 0)
+    LcdContrast = 0;
+  if (LcdContrast > 125)
+    LcdContrast = 125;
+  analogWrite(mc_Contrast, LcdContrast);
+  save_to_eeprom();
+  action_flash();  
+}
+
 //----------------------------------------------------------
 // Standard Arduino loop() function.
 //----------------------------------------------------------
@@ -993,6 +1054,7 @@ void loop(void)
       case vfo_HoldClick:
         Serial.println("Got vfo_HoldClick: calling show_menu()");
         show_menu(&main_menu);
+//        save_to_eeprom();
         dump_queue("After show_menu()");
         show_main_screen();
         break;
