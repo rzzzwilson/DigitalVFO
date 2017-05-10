@@ -20,7 +20,7 @@
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
-const char *Version = "0.6";
+const char *Version = "0.7";
 const char *Callsign = "vk4fawr";
 const char *Callsign16 = "vk4fawr         ";
 
@@ -43,6 +43,9 @@ const byte lcd_D7 = 12;
 const int re_pinA = 2;     // encoder A pin
 const int re_pinB = 3;     // encoder B pin
 const int re_pinPush = 4;  // encoder pushbutton pin
+
+// define Teensy pin controlling contrast
+const byte mc_Contrast = 6;
 
 // max and min frequency showable
 #define MAX_FREQ        30000000L
@@ -749,6 +752,10 @@ void setup(void)
   lcd.noCursor();
   lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
 
+  // initialize contrast control
+  pinMode(mc_Contrast, OUTPUT);
+  analogWrite(mc_Contrast, 75);
+
   // get state back from EEPROM
   restore_from_eeprom();
 
@@ -784,7 +791,7 @@ void show_main_screen(void)
 // Define the menus to be used, plus handler code
 //-----
 
-const char *menu_items[] = {"Save slot", "Restore slot", "Delete slot"};
+const char *menu_items[] = {"Save slot", "Restore slot", "Delete slot", "Settings"};
 #define NumMainMenuItems (sizeof(menu_items)/sizeof(const char *))
 
 Menu main_menu = {"Menu", menu_display, menu_select,
@@ -798,6 +805,12 @@ Menu restore_menu = {menu_items[1], savresdel_display, restore_select,
 
 Menu delete_menu = {menu_items[2], savresdel_display, delete_select,
                     NumSaveSlots, NULL};
+
+//const char *settings_items[] = {"Contrast"};
+//#define NumSettingsMenuItems (sizeof(settings_items)/sizeof(const char *))
+//
+//Menu settings_menu = {menu_items[3], settings_display, settings_select,
+//                      NumSettingsMenuItems, settings_items};
 
 
 void menu_display(Menu *menu, int slot_num)
