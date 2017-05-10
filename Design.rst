@@ -1,6 +1,21 @@
 Digital VFO Design
 ==================
 
+The main hardware components for the VFO are:
+
++-----------------+-------------------------------------------+
+| Microcontroller | Controls the VFO.                         |
++-----------------+-------------------------------------------+
+| Rotary encoder  | Allows the user to change VFO frequency   |
+|                 | as well as save/restore frequencies, etc. |
++-----------------+-------------------------------------------+
+| LCD display     | Display the VFO frequency as well as show |
+|                 | the menus, etc.                           |
++-----------------+-------------------------------------------+
+| DDS-60 VFO      | Generates the desired VFO frequency.      |
++-----------------+-------------------------------------------+
+
+
 Event Queue
 -----------
 
