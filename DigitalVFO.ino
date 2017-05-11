@@ -2,7 +2,7 @@
 // A digital VFO using the DDS-60 card.
 //
 // The VFO will generate signals in the range 1.000000MHz to 30.000000MHz
-// with a step of 1Hz.
+// with a step ranging down to 1Hz.
 //
 // The interface will be a single rotary encoder with a built-in pushbutton.
 // The frequency display will have a 'selected' digit which can be moved left
@@ -16,12 +16,12 @@
 
 
 //#define RESET   // define if resetting all EEPROM data
-#define DEBUG   // define if debugging
+//#define DEBUG   // define if debugging
 
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
-const char *Version = "0.7";
+const char *Version = "0.8";
 const char *Callsign = "vk4fawr";
 const char *Callsign16 = "vk4fawr         ";
 
@@ -46,6 +46,7 @@ const int re_pinB = 3;     // encoder B pin
 const int re_pinPush = 4;  // encoder pushbutton pin
 
 // define pin controlling contrast
+const byte mc_Brightness = 5;
 const byte mc_Contrast = 6;
 
 // max and min frequency showable
@@ -103,8 +104,9 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 #define vfo_Click     5
 #define vfo_HoldClick 6
 
-// default LCD contrast
-const int DefaultLcdContrast = 50;
+// default LCD contrast & brightness
+const int DefaultLcdContrast = 70;
+const int DefaultLcdBrightness = 150;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -120,7 +122,7 @@ SelOffset VfoSelectDigit;   // selected column index, zero at the right
 typedef byte VFOEvent;
 
 int LcdContrast;
-
+int LcdBrightness = 255;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Utility routines
@@ -198,8 +200,8 @@ const char * event2display(VFOEvent event)
 // display a simple banner
 void banner(void)
 {
-  Serial.print(ProgramName); Serial.print(" "); Serial.println(Version);
-  Serial.println(Callsign);
+  Serial.print(ProgramName); Serial.print(" "); Serial.print(Version);
+  Serial.print(" ("); Serial.print(Callsign); Serial.println(")");
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.write(ProgramName);
@@ -279,7 +281,7 @@ void ltobbuff(char *buf, int bufsize, Frequency value)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Code to handle the menus.
+// Code to handle the DigitalVFO menus.
 ////////////////////////////////////////////////////////////////////////////////
 
 // typedef for a menu display handler
@@ -290,23 +292,28 @@ typedef void (*MenuDisplay)(Menu *menu, int slot_num);
 // this handles selecting a particular item
 typedef void (*MenuAction)(Menu *menu, int slot_num);
 
+//------------------------------------------
+// A structure defining a menu page.
+//
+// This structure is passed to show_menu().
 struct Menu
 {
-  const char *title;
-  MenuDisplay display;
-  MenuAction action;
-  int num_items;
-  const char **items;
+  const char *title;      // title displayed on menu page
+  MenuDisplay display;    // routine to draw the menu page
+  MenuAction action;      // routine called when a 'select' action is made
+  int num_items;          // number of selection items in the list
+  const char **items;     // list of poiunter to selction item text
 };
 
+// Draw a menu page from the passed "menu" structure.
 void show_menu(struct Menu *menu)
 {
-  int item_index = 0;
+  int item_index = 0;     // draw the first item
 
-  // update the menu display
+  // draw the menu page
   menu->display(menu, item_index);
 
-  flush_events();
+  flush_events();         // get rid of any stray events to this point
 
   while (true)
   {
@@ -641,11 +648,15 @@ const int AddressSelDigitSize = sizeof(int);
 const int AddressContrast = AddressSelDigit + AddressSelDigitSize;
 const int AddressContrastSize = sizeof(LcdContrast);
 
+// address for byte 'brightness'
+const int AddressBrightness = AddressContrast + AddressContrastSize;
+const int AddressBrightnessSize = sizeof(LcdBrightness);
+
 // number of frequency save slots in EEPROM
 const int NumSaveSlots = 10;
 
 const int SaveFreqSize = sizeof(long);
-const int SaveFreqBase = AddressContrast + AddressContrastSize;
+const int SaveFreqBase = AddressBrightness + AddressBrightnessSize;
 const int SaveFreqBaseSize = NumSaveSlots * SaveFreqSize;
 
 //also save the offset for each frequency
@@ -659,8 +670,11 @@ const int NextFreeAddress = SaveOffsetBase + SaveOffsetBaseSize;
 // save VFO state to EEPROM
 void save_to_eeprom(void)
 {
+  Serial.println("save_to_eeprom() called");
+  
   EEPROM.put(AddressFreq, VfoFrequency);
   EEPROM.put(AddressSelDigit, VfoSelectDigit);
+  EEPROM.put(AddressBrightness, LcdBrightness);
   EEPROM.put(AddressContrast, LcdContrast);
 }
 
@@ -669,6 +683,7 @@ void restore_from_eeprom(void)
 {
   EEPROM.get(AddressFreq, VfoFrequency);
   EEPROM.get(AddressSelDigit, VfoSelectDigit);
+  EEPROM.get(AddressBrightness, LcdBrightness);
   EEPROM.get(AddressContrast, LcdContrast);
 }
 
@@ -693,18 +708,21 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 }
 
 // print all EEPROM saved data to console
-void dump_eeprom()
+void dump_eeprom(void)
 {
   Frequency ulong;
   SelOffset offset;
+  int brightness;
   int contrast;
 
   EEPROM.get(AddressFreq, ulong);
   EEPROM.get(AddressSelDigit, offset);
+  EEPROM.get(AddressBrightness, brightness);
   EEPROM.get(AddressContrast, contrast);
   Serial.println("=================================================");
   Serial.print("dump_eeprom: VfoFrequency="); Serial.println(ulong);
   Serial.print("             AddressSelDigit="); Serial.println(offset);
+  Serial.print("             LcdBrightness="); Serial.println(brightness);
   Serial.print("             LcdContrast="); Serial.println(contrast);
 
   for (int i = 0; i < NumSaveSlots; ++i)
@@ -750,6 +768,7 @@ void zero_slots(void)
   // zero the frequency+selected values
   VfoFrequency = MIN_FREQ;
   VfoSelectDigit = 0;
+  LcdBrightness = DefaultLcdBrightness;
   LcdContrast = DefaultLcdContrast;
   
   save_to_eeprom();
@@ -775,28 +794,34 @@ void setup(void)
   lcd.noCursor();
   lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
 
-  // initialize contrast control
+  pinMode(mc_Brightness, OUTPUT);
   pinMode(mc_Contrast, OUTPUT);
-  analogWrite(mc_Contrast, DefaultLcdContrast);
 
   // get state back from EEPROM
   restore_from_eeprom();
+  analogWrite(mc_Brightness, LcdBrightness);
+  analogWrite(mc_Contrast, LcdContrast);
 
   // set up the rotary encoder
   re_setup(VfoSelectDigit);
 
   // show program name and version number
-#ifndef DEBUG
   banner();
   if (pop_event() == vfo_HoldClick)
-    Serial.println("Would reset here");
-#endif
+  {
+    LcdBrightness = DefaultLcdBrightness;
+    LcdContrast = DefaultLcdContrast;
+    Serial.print("Reset brightness to "); Serial.print(LcdBrightness);
+    analogWrite(mc_Brightness, LcdBrightness);
+    Serial.print(" and contrast to "); Serial.println(LcdContrast);
+    analogWrite(mc_Contrast, LcdContrast);
+  }
   
   // we sometimes see random events on powerup, flush them here
   flush_events();
   
-  // dump EEPROM values
 #ifdef DEBUG
+  // dump EEPROM values
   dump_eeprom();
 #endif
 
@@ -822,31 +847,34 @@ void show_main_screen(void)
 const char *menu_items[] = {"Save slot", "Restore slot", "Delete slot", "Settings"};
 #define NumMainMenuItems (sizeof(menu_items)/sizeof(const char *))
 
-Menu main_menu = {"Menu", menu_display, menu_select,
-                  NumMainMenuItems, menu_items};
+struct Menu main_menu = {"Menu", menu_display, menu_select,
+                         NumMainMenuItems, menu_items};
 
-Menu save_menu = {menu_items[0], savresdel_display, save_select,
-                  NumSaveSlots, NULL};
+struct Menu save_menu = {menu_items[0], savresdel_display, save_select,
+                         NumSaveSlots, NULL};
 
-Menu restore_menu = {menu_items[1], savresdel_display, restore_select,
-                     NumSaveSlots, NULL};
+struct Menu restore_menu = {menu_items[1], savresdel_display, restore_select,
+                            NumSaveSlots, NULL};
 
-Menu delete_menu = {menu_items[2], savresdel_display, delete_select,
-                    NumSaveSlots, NULL};
+struct Menu delete_menu = {menu_items[2], savresdel_display, delete_select,
+                           NumSaveSlots, NULL};
 
 const char *settings_items[] = {"Brightness", "Contrast"};
 #define NumSettingsMenuItems (sizeof(settings_items)/sizeof(const char *))
 
-Menu settings_menu = {menu_items[3], menu_display, settings_select,
-                      NumSettingsMenuItems, settings_items};
+struct Menu settings_menu = {menu_items[3], menu_display, settings_select,
+                             NumSettingsMenuItems, settings_items};
 
-const char *contrast_items[] = {"Decrease", "Increase"};
-#define NumContrastMenuItems (sizeof(settings_items)/sizeof(const char *))
+const char *inc_dec_items[] = {"Increase", "Decrease"};
+#define NumIncDecMenuItems (sizeof(inc_dec_items)/sizeof(const char *))
 
-Menu contrast_menu = {settings_items[1], menu_display, contrast_select,
-                      NumContrastMenuItems, contrast_items};
+struct Menu brightness_menu = {settings_items[0], menu_display, brightness_select,
+                               NumIncDecMenuItems, inc_dec_items};
 
-void menu_display(Menu *menu, int slot_num)
+struct Menu contrast_menu = {settings_items[1], menu_display, contrast_select,
+                             NumIncDecMenuItems, inc_dec_items};
+
+void menu_display(struct Menu *menu, int slot_num)
 {
   // figure out max length of item strings
   int max_len = 0;
@@ -870,7 +898,7 @@ void menu_display(Menu *menu, int slot_num)
   lcd.write(menu->items[slot_num]);
 }
 
-void menu_select(Menu *menu, int slot_num)
+void menu_select(struct Menu *menu, int slot_num)
 {
   const char *action_text = menu->items[slot_num];
 
@@ -901,7 +929,7 @@ void menu_select(Menu *menu, int slot_num)
 }
 
 // draw the Save, Restore or Delete screen
-void savresdel_display(Menu *menu, int slot_num)
+void savresdel_display(struct Menu *menu, int slot_num)
 {
   Frequency freq;
   SelOffset offset;
@@ -948,7 +976,7 @@ void action_flash(void)
   lcd.display();
 }
 
-void save_select(Menu *menu, int slot_num)
+void save_select(struct Menu *menu, int slot_num)
 {
   // display an 'action flash'
   action_flash();
@@ -958,7 +986,7 @@ void save_select(Menu *menu, int slot_num)
   savresdel_display(menu, slot_num);
 }
 
-void restore_select(Menu *menu, int slot_num)
+void restore_select(struct Menu *menu, int slot_num)
 {
   // display an 'action flash'
   action_flash();
@@ -968,7 +996,7 @@ void restore_select(Menu *menu, int slot_num)
   savresdel_display(menu, slot_num);
 }
 
-void delete_select(Menu *menu, int slot_num)
+void delete_select(struct Menu *menu, int slot_num)
 {
   // display an 'action flash'
   action_flash();
@@ -978,27 +1006,56 @@ void delete_select(Menu *menu, int slot_num)
   savresdel_display(menu, slot_num);
 }
 
-void settings_select(Menu *menu, int slot_num)
+void settings_select(struct Menu *menu, int slot_num)
 {
   Serial.print("settings_select() called, slot_num="); Serial.println(slot_num);
-  show_menu(&contrast_menu);
+  if (slot_num == 0)
+      show_menu(&brightness_menu);
+  else if (slot_num == 1)
+      show_menu(&contrast_menu);
 }
 
-void contrast_select(Menu *menu, int slot_num)
+void contrast_select(struct Menu *menu, int slot_num)
 {
-  if (slot_num == 0)
-      LcdContrast += 5;
-  else if (slot_num == 1)
-      LcdContrast -= 5;
+  Serial.print("contrast_select(): slot_num="); Serial.println(slot_num);
+
+  // adjust contrast
+  // +/- opposite to that for brightness because increasing
+  // voltage has the opposite effect with contrast
+  if (slot_num == 0)        // "increase" item selected 
+    LcdContrast -= 10;
+  else if (slot_num == 1)   // "decrease" item selected
+    LcdContrast += 10;
   else
-    abort("Bad slot numvber");
+    abort("Bad slot number");
 
   if (LcdContrast < 0)
     LcdContrast = 0;
   if (LcdContrast > 125)
     LcdContrast = 125;
   analogWrite(mc_Contrast, LcdContrast);
-  save_to_eeprom();
+  Serial.print("Set contrast to "); Serial.println(LcdContrast);
+  action_flash();
+}
+
+void brightness_select(struct Menu *menu, int slot_num)
+{
+  Serial.print("brightness_select(): slot_num="); Serial.println(slot_num);
+  
+  if (slot_num == 0)        // "increase" item selected 
+    LcdBrightness += 10;
+  else if (slot_num == 1)   // "increase" item selected 
+    LcdBrightness -= 10;
+  else
+    abort("Bad slot numvber");
+
+  if (LcdBrightness < 0)
+    LcdBrightness = 0;
+  if (LcdBrightness > 255)
+    LcdBrightness = 255;
+
+  analogWrite(mc_Brightness, LcdBrightness);
+  Serial.print("Set brightness to "); Serial.println(LcdBrightness);
   action_flash();  
 }
 
@@ -1054,8 +1111,7 @@ void loop(void)
       case vfo_HoldClick:
         Serial.println("Got vfo_HoldClick: calling show_menu()");
         show_menu(&main_menu);
-//        save_to_eeprom();
-        dump_queue("After show_menu()");
+        save_to_eeprom();  // save any changes made in the menu syste,
         show_main_screen();
         break;
       default:
