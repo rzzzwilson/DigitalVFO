@@ -49,6 +49,12 @@ const int re_pinPush = 4;  // encoder pushbutton pin
 const byte mc_Brightness = 5;
 const byte mc_Contrast = 6;
 
+// define pins that control the DDS-60
+const byte FQ_UD = 14;    // connected to AD9851 device select pin
+const byte W_CLK = 15;    // connected to AD9851 clock pin
+const byte DATA = 16;     // connected to AD9851 D7 (serial data) pin 
+
+
 // max and min frequency showable
 #define MAX_FREQ        30000000L
 #define MIN_FREQ        1000000L
@@ -744,11 +750,57 @@ void get_vfo_freq_offset(Frequency &freq, SelOffset &offset)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Code to handle the DDS-60
+//
+// From: http://www.rocketnumbernine.com/2011/10/25/programming-the-ad9851-dds-synthesizer
+// Andrew Smallbone <andrew@rocketnumbernine.com>
 ////////////////////////////////////////////////////////////////////////////////
 
-void update_dds60(Frequency freq)
+void dds_pulse_high(byte pin)
 {
+  digitalWrite(pin, HIGH);
+  digitalWrite(pin, LOW);
+}
 
+// transfer a byte a bit at a time LSB first to DATA
+void dds_tfr_byte(byte data)
+{
+  for (int i = 0; i < 8; ++i, data >>= 1)
+  {
+    digitalWrite(DATA, data & 0x01);
+    dds_pulse_high(W_CLK);
+  }
+}
+
+// frequency of signwave (datasheet page 12) will be <sys clock> * <frequency tuning word> / 2^32
+void update_dds60(Frequency frequency)
+{
+  int32_t freq = frequency * 4294967296.0 / 180.0e6;
+
+  Serial.print("update_dds60: frequency="); Serial.println(frequency);
+  Serial.print("                   fred="); Serial.println(freq);
+  
+  for (int b = 0; b < 4; ++b, freq >>= 8)
+  {
+    dds_tfr_byte(freq & 0xFF);
+  }
+  
+  dds_tfr_byte(0x001);
+  dds_pulse_high(FQ_UD);
+}
+
+void dds_setup()
+{
+  // all pins to outputs
+  pinMode(FQ_UD, OUTPUT);
+  pinMode(W_CLK, OUTPUT);
+  pinMode(DATA, OUTPUT);
+
+  // if your board needs it, connect RESET pin and pulse it to reset AD9851
+  // dds_pulse_high(RESET)
+
+  // set serial load enable (Datasheet page 15 Fig. 17) 
+  dds_pulse_high(W_CLK);
+  dds_pulse_high(FQ_UD);
 }
 
 
