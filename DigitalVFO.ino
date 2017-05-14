@@ -15,8 +15,11 @@
 #include <EEPROM.h>
 
 
+// macro to get number of elements in an array
+#define ARRAY_LEN(a)    (sizeof(a)/sizeof(a[0]))
+
 //#define RESET   // define if resetting all EEPROM data
-//#define DEBUG   // define if debugging
+#define DEBUG   // define if debugging
 
 
 // Digital VFO program name & version
@@ -65,6 +68,7 @@ const byte DATA = 16;     // connected to AD9851 D7 (serial data) pin
 // address in display CGRAM for definable characters
 #define SELECT_CHAR     0   // shows 'underlined' decimal digits (dynamic, 0 to 9)
 #define SPACE_CHAR      1   // shows an 'underlined' space character
+#define ALLSET_CHAR     2   // shows an 'all bits set' character
 // FIXME use only one CGRAM character for 0 to 9 AND space
 
 // define the numeric digits and space with selection underline
@@ -83,6 +87,9 @@ byte selspace[8] = {0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x1f};
 // array of references to the 11 'selected' characters (0 to 9 plus space)
 byte *sel_digits[] = {sel0, sel1, sel2, sel3, sel4, sel5, sel6, sel7, sel8, sel9, selspace};
 #define SPACE_INDEX   10
+
+// define custom char for "all bits set"
+byte allset[8] = {0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
 
 // map select_offset to bump values
 unsigned long offset2bump[] = {1,           // offset = 0
@@ -203,7 +210,10 @@ const char * event2display(VFOEvent event)
   }
 }
 
+//----------------------------------------------------------
 // display a simple banner
+//----------------------------------------------------------
+
 void banner(void)
 {
   Serial.print(ProgramName); Serial.print(" "); Serial.print(Version);
@@ -290,37 +300,91 @@ void ltobbuff(char *buf, int bufsize, Frequency value)
 // Code to handle the DigitalVFO menus.
 ////////////////////////////////////////////////////////////////////////////////
 
-// typedef for a menu display handler
-// this handler draws the entire current screen
-typedef void (*MenuDisplay)(Menu *menu, int slot_num);
+// handler for selection of an item (vfo_Click event)
+typedef void (*ItemSelection)(Menu *, int);
 
-// typedef for a menu item action handler
-// this handles selecting a particular item
-typedef void (*MenuAction)(Menu *menu, int slot_num);
+// handler for inc/dec of item (vfo_RRight, vfo_RLeft events)
+typedef int (*ItemIncDec)(int index, int delta);
 
-//------------------------------------------
-// A structure defining a menu page.
-//
-// This structure is passed to show_menu().
-struct Menu
+// structure defining a menu item
+struct MenuItem
 {
-  const char *title;      // title displayed on menu page
-  MenuDisplay display;    // routine to draw the menu page
-  MenuAction action;      // routine called when a 'select' action is made
-  int num_items;          // number of selection items in the list
-  const char **items;     // list of poiunter to selction item text
+  const char *item_title;     // menu item display text
+  struct Menu *menu;          // menu to use after selection
+  ItemSelection action;       // routine to handle select on the item
+  ItemIncDec incdec;          // routine to handle inc/dec on the item
 };
 
-// Draw a menu page from the passed "menu" structure.
-void show_menu(struct Menu *menu)
+typedef struct MenuItem *MenuItemPtr;
+
+// A structure defining a menu
+struct Menu
 {
-  int item_index = 0;     // draw the first item
+  const char *title;          // title displayed on menu page
+  int num_items;              // number of items in the array below
+  struct MenuItem **items;    // array of pointers to MenuItem data
+};
+
+typedef struct Menu *MenuPtr;
+
+//----------------------------------------
+// actually draw the menu on the screen
+//     menu      pointer to a Menu structure
+//     item_num  the item number to show
+//----------------------------------------
+
+void menu_draw(struct Menu *menu, int item_num)
+{
+  // clear screen and write menu title on upper row
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.write(menu->title);
+}
+
+void menuitem_draw(struct Menu *menu, int item_num)
+{
+  // figure out max length of item strings
+  int max_len = 0;
+
+  for (int i = 0; i < menu->num_items; ++ i)
+  {
+    int new_len = strlen(menu->items[i]->item_title);
+
+    if (new_len > max_len)
+        max_len = new_len;
+  }
+
+  // write indexed item on lower row, right-justified
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  lcd.setCursor(NUM_COLS - max_len, 1);
+  lcd.write(menu->items[item_num]->item_title);
+  
+}
+
+//----------------------------------------
+// Draw a menu page from the passed "menu" structure.
+//     menu      pointer to a defining Menu structure
+//     item_num  number of item to initially display
+//----------------------------------------
+
+void menu_show(struct Menu *menu, int item_num)
+{
+  Serial.print("menu_show: menu="); Serial.print((unsigned long) menu);
+  Serial.print(", item_num="); Serial.println(item_num);
+  
+  // get rid of any stray events to this point
+  flush_events();
 
   // draw the menu page
-  menu->display(menu, item_index);
+  menu_draw(menu, item_num);
 
-  flush_events();         // get rid of any stray events to this point
-
+  // decide if draw menuitem or a dynamic display
+  if (menu->num_items == 1)
+    (menu->items[item_num]->incdec)(item_num, 0);  // draw without modifying
+  else
+    menuitem_draw(menu, item_num);
+  
   while (true)
   {
     // handle any pending event
@@ -333,16 +397,57 @@ void show_menu(struct Menu *menu)
       {
         case vfo_RLeft:
           Serial.println("Menu: vfo_RLeft");
-          --item_index;
-          if (item_index < 0)
-            item_index = 0;
+          if (menu->num_items == 1)
+          {
+            // special dynamic menuitem
+            Serial.print("special dynamic menuitem, before item_num="); Serial.println(item_num);
+            Serial.print("menu->items[item_num]->incdec=");
+            Serial.println((unsigned long) menu->items[item_num]->incdec);
+            item_num = menu->items[item_num]->incdec(item_num, -1);
+            Serial.print("after item_num="); Serial.println(item_num);
+          }
+          else
+          {
+            // normal menuitem
+            if (--item_num < 0)
+              item_num = 0;
+          }
           break;
         case vfo_RRight:
-          Serial.print("Menu: vfo_RRight, menu->num_items="); Serial.println(menu->num_items);
-          ++item_index;
-          if (item_index >= menu->num_items)
-            item_index = menu->num_items - 1;
-          Serial.print("Menu: vfo_RRight, new item_index="); Serial.println(item_index);
+          Serial.print("Menu: vfo_RRight, menu=");
+          Serial.print((unsigned long) menu);
+          Serial.print(", menu->num_items=");
+          Serial.print(menu->num_items);
+          Serial.print(", menu->items[item_num]->incdec=");
+          Serial.println((unsigned long) menu->items[item_num]->incdec);
+          if (menu->num_items == 1)
+          {
+            // special dynamic menuitem
+            Serial.print("special dynamic menuitem, before item_num=");
+            Serial.print(item_num);
+            Serial.print(", menu->items[item_num]->incdec=");
+            Serial.println((unsigned long) menu->items[item_num]->incdec);
+            
+            item_num = menu->items[item_num]->incdec(item_num, +1);
+            
+            Serial.print("AFTER menu->items[item_num]->incdec=");
+            Serial.print((unsigned long) menu->items[item_num]->incdec);
+            Serial.print(", item_num=");
+            Serial.println(item_num);
+          }
+          else
+          {
+            // normal menuitem
+            if (++item_num >= menu->num_items)
+              item_num = menu->num_items - 1;
+          }
+          Serial.print("Menu: AFTER vfo_RRight, menu=");
+          Serial.print((unsigned long) menu);
+          Serial.print(", menu->num_items=");
+          Serial.print(menu->num_items);
+          Serial.print(", menu->items[item_num]->incdec=");
+          Serial.println((unsigned long) menu->items[item_num]->incdec);
+          Serial.print("Menu: vfo_RRight, new item_num="); Serial.println(item_num);
           break;
         case vfo_DnRLeft:
           Serial.println("Menu: vfo_DnRLeft");
@@ -351,10 +456,21 @@ void show_menu(struct Menu *menu)
           Serial.println("Menu: vfo_DnRRight");
           break;
         case vfo_Click:
-          Serial.println("Menu: vfo_Click");
-          if (menu->action)
-            (*menu->action)(menu, item_index);
-          flush_events();
+          Serial.print("Menu: vfo_Click: menu->title=");
+          Serial.print(menu->title);
+          Serial.print(", item_num=");
+          Serial.print(item_num); Serial.print(", menu->items[item_num]->action=");
+          Serial.println((unsigned long) menu->items[item_num]->action);
+          
+          // if there's a handler, call it
+          if (menu->items[item_num]->action != NULL)
+          {
+            Serial.println("Calling vfo_Click handler");
+            (*menu->items[item_num]->action)(menu->items[item_num]->menu, 0);
+          }
+
+          menu_draw(menu, item_num);    // redraw the menu header
+          Serial.println("Menu: end of vfo_Click handling");
           break;
         case vfo_HoldClick:
           Serial.println("Menu: vfo_HoldClick, exit menu");
@@ -366,9 +482,25 @@ void show_menu(struct Menu *menu)
       }
 
       // update the menu display
-      menu->display(menu, item_index);
+      if (menu->num_items == 1)
+        (menu->items[item_num]->incdec)(item_num, 0);  // draw without modifying
+      else
+        menuitem_draw(menu, item_num);
     }
   }
+}
+
+// show that *something* happened
+// flashes the menu page in a possibly eye-catching way
+void menu_flash(void)
+{
+  lcd.noDisplay();
+  delay(100);
+  lcd.display();
+  delay(100);
+  lcd.noDisplay();
+  delay(100);
+  lcd.display();
 }
 
 
@@ -413,7 +545,7 @@ VFOEvent pop_event(void)
   // get next event
   VFOEvent event = event_queue[queue_aft];
 
-  // mkove aft pointer up one slot, wrap if necessary
+  // move aft pointer up one slot, wrap if necessary
   ++queue_aft;
   if (queue_aft  >= QueueLength)
     queue_aft = 0;
@@ -524,6 +656,7 @@ void print_freq(Frequency freq, int sel_col, int row)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Interrupt driven rotary encoder interface.
+// from code by Simon Merrett, based on insight from Oleg Mazurov, Nick Gammon, rt, Steve Spence
 ////////////////////////////////////////////////////////////////////////////////
 
 // time when click becomes a "hold click" (milliseconds)
@@ -706,10 +839,16 @@ void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
 // put frequency/offset into given slot number
 void put_slot(int slot_num, Frequency freq, SelOffset offset)
 {
+  Serial.print("put_slot: slot_num="); Serial.print(slot_num);
+  Serial.print(", freq="); Serial.print(freq);
+  Serial.print(", offset="); Serial.println(offset);
+  
   int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
   int offset_address = SaveOffsetBase + slot_num * SaveOffsetSize;
 
+  Serial.print("Saving freq to slot at "); Serial.println(freq_address);
   EEPROM.put(freq_address, freq);
+  Serial.print("Saving offset to slot at "); Serial.println(offset_address);
   EEPROM.put(offset_address, offset);
 }
 
@@ -845,6 +984,7 @@ void setup(void)
   lcd.clear();
   lcd.noCursor();
   lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
+  lcd.createChar(ALLSET_CHAR, allset);
 
   pinMode(mc_Brightness, OUTPUT);
   pinMode(mc_Contrast, OUTPUT);
@@ -858,6 +998,7 @@ void setup(void)
   re_setup(VfoSelectDigit);
 
   // show program name and version number
+#ifndef DEBUG
   banner();
   if (pop_event() == vfo_HoldClick)
   {
@@ -868,7 +1009,8 @@ void setup(void)
     Serial.print(" and contrast to "); Serial.println(LcdContrast);
     analogWrite(mc_Contrast, LcdContrast);
   }
-  
+#endif
+
   // we sometimes see random events on powerup, flush them here
   flush_events();
   
@@ -893,95 +1035,224 @@ void show_main_screen(void)
 }
 
 //-----
-// Define the menus to be used, plus handler code
+// Define the menu handler routines.
+// These actually do the work, everything else is just navigation.
 //-----
 
-const char *menu_items[] = {"Save slot", "Restore slot", "Delete slot", "Settings"};
-#define NumMainMenuItems (sizeof(menu_items)/sizeof(const char *))
-
-struct Menu main_menu = {"Menu", menu_display, menu_select,
-                         NumMainMenuItems, menu_items};
-
-struct Menu save_menu = {menu_items[0], savresdel_display, save_select,
-                         NumSaveSlots, NULL};
-
-struct Menu restore_menu = {menu_items[1], savresdel_display, restore_select,
-                            NumSaveSlots, NULL};
-
-struct Menu delete_menu = {menu_items[2], savresdel_display, delete_select,
-                           NumSaveSlots, NULL};
-
-const char *settings_items[] = {"Brightness", "Contrast"};
-#define NumSettingsMenuItems (sizeof(settings_items)/sizeof(const char *))
-
-struct Menu settings_menu = {menu_items[3], menu_display, settings_select,
-                             NumSettingsMenuItems, settings_items};
-
-const char *inc_dec_items[] = {"Increase", "Decrease"};
-#define NumIncDecMenuItems (sizeof(inc_dec_items)/sizeof(const char *))
-
-struct Menu brightness_menu = {settings_items[0], menu_display, brightness_select,
-                               NumIncDecMenuItems, inc_dec_items};
-
-struct Menu contrast_menu = {settings_items[1], menu_display, contrast_select,
-                             NumIncDecMenuItems, inc_dec_items};
-
-void menu_display(struct Menu *menu, int slot_num)
+// show a save slot, draw in row 1
+void saveslot_show(Menu *menu, int slot_num)
 {
-  // figure out max length of item strings
-  int max_len = 0;
+  Serial.print("saveslot_show() entered, slot_num="); Serial.println(slot_num);
 
-  for (int i = 0; i < menu->num_items; ++ i)
-  {
-    int new_len = strlen(menu->items[i]);
+  Frequency freq;
+  SelOffset offset;
 
-    if (new_len > max_len)
-        max_len = new_len;
-  }
+  // max length of item strings is "9: xxxxxxxxHz" - 13 chars
+  const int max_len = 13;
+  char buf[MAX_FREQ_CHARS + 1];
 
-  // write menu title on upper row
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.write(menu->title);
+  get_slot(slot_num, freq, offset);
+
+  ltochbuff(buf, MAX_FREQ_CHARS, freq);
+  buf[MAX_FREQ_CHARS] = 0;
+
+//  // write menu title on first row
+//  lcd.clear();
+//  lcd.setCursor(0, 0);
+//  lcd.write(menu->title);
 
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  // show '*' if slot frequency equal to current
+  if (freq == VfoFrequency)
+  {
+    lcd.setCursor(0, 1);
+    lcd.write("*");
+  }
   lcd.setCursor(NUM_COLS - max_len, 1);
-  lcd.write(menu->items[slot_num]);
+  lcd.write(slot_num + '0');
+  lcd.write(": ");
+  lcd.write(buf);
+  lcd.write("Hz");
 }
 
-void menu_select(struct Menu *menu, int slot_num)
+// save the current frequency to a slot
+void saveslot_action(Menu *menu, int item_num)
 {
-  const char *action_text = menu->items[slot_num];
+  Serial.println("saveslot_action() entered");
 
-  if (strcmp(action_text, menu->items[0]) == 0)
-  {
-      show_menu(&save_menu);
-  }
-  else if (strcmp(action_text, menu->items[1]) == 0)
-  {
-      show_menu(&restore_menu);
-  }
-  else if (strcmp(action_text, menu->items[2]) == 0)
-  {
-      show_menu(&delete_menu);
-  }
-  else if (strcmp(action_text, menu->items[3]) == 0)
-  {
-      show_menu(&settings_menu);
-  }
-  else
-  {
-    char msg[32+1];
+  // display an 'action' flash
+  menu_flash();
 
-    strcpy(msg, "Unknown: ");
-    strcpy(msg+strlen("Unknown: "), action_text);
-    abort(msg);
-  }
+  put_slot(item_num, VfoFrequency, VfoSelectDigit);
+
+  savresdel_show(menu, item_num);
 }
+
+// restore the current frequency from a slot
+void restoreslot_show(Menu *menu, int item_num)
+{
+  Serial.println("restoreslot_show() entered");
+
+  // display an 'action' flash
+  menu_flash();
+
+  get_slot(item_num, VfoFrequency, VfoSelectDigit);
+
+  savresdel_show(menu, item_num);  
+}
+
+// delete the frequency in a slot
+void deleteslot_show(Menu *menu, int item_num)
+{
+  Serial.println("deleteslot_show() entered");
+
+  // display an 'action' flash
+  menu_flash();
+
+  put_slot(item_num, 0L, 0);
+
+  savresdel_show(menu, item_num);    
+}
+
+// increase/decrease the display brightness
+void set_brightness(Menu *menu, int item_num)
+{
+  Serial.println("set_brightness() entered");
+
+  
+}
+
+// increase/decrease the display contrast
+void set_contrast(Menu *menu, int item_num)
+{
+  Serial.println("set_contrast() entered");
+
+  
+}
+
+//-----
+// settings menu
+//-----
+
+#ifdef JUNK
+struct MenuItem mi_brightness = {"Brightness", NULL, set_brightness, NULL};
+struct MenuItem mi_contrast = {"Contrast", NULL, set_contrast, NULL};
+struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast};
+
+//#define NumSettingsMenuItems (sizeof(mia_settings)/sizeof(struct MenuItem *))
+
+struct Menu settings_menu = {"Settings", ARRAY_LEN(mia_settings), mia_settings};
+
+//-----
+// "save slot" menu
+//-----
+
+struct MenuItem mi_saveslot = {NULL, NULL, saveslot_action, saveslot_show};
+struct MenuItem *mia_saveslot[] = {&mi_saveslot};
+
+struct Menu saveslot_menu = {"Save slot", ARRAY_LEN(mia_saveslot), mia_saveslot};
+
+//-----
+// main menu
+//-----
+
+struct MenuItem save = {"Save slot", &saveslot_menu, &menu_show, NULL};
+struct MenuItem restore = {"Restore slot", NULL, &menu_show, NULL};
+struct MenuItem del = {"Delete slot", NULL, &menu_show, NULL};
+struct MenuItem settings = {"Settings", &settings_menu, &menu_show, NULL};
+struct MenuItem *m_menu[] = {&save, &restore, &del, &settings};
+
+//#define NumMainMenuItems (sizeof(m_menu)/sizeof(struct MenuItem *))
+//#define NumMainMenuItems ARRAY_LEN(m_menu)
+
+struct Menu main_menu = {"Menu", ARRAY_LEN(m_menu), m_menu};
+#endif
+
+void alphaalpha_action(Menu *menu, int slot_num)
+{
+  Serial.print("alphaalpha_action: menu=");
+  Serial.print((unsigned long) menu);
+  Serial.print(", slot_num=");
+  Serial.println(slot_num);
+}
+
+#define MaxSlotNum 10
+
+int alphaalpha_incdec(int slot_num, int delta)
+{
+  Serial.print("alphaalpha_incdec: slot_num=");
+  Serial.println(slot_num);
+
+  // first, bump the internal index, limit to range
+  slot_num += delta;
+  if (slot_num < 0)
+    slot_num = 0;
+  else
+    if (slot_num >= MaxSlotNum)
+      slot_num = MaxSlotNum - 1;
+
+  Serial.print("alphaalpha_incdec: drawing bar length ");
+  Serial.println(slot_num + 1);
+//  lcd.write(ALLSET_CHAR);
+  // draw the row 1 reresentation of the value
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  lcd.setCursor(0, 1);
+  for (int i = 0; i <= slot_num; ++i)
+  {
+    lcd.write(ALLSET_CHAR);
+  }
+  
+  Serial.print("alphaalpha_action: returning ");
+  Serial.println(slot_num);
+  
+  return slot_num;
+}
+
+struct MenuItem mi_alphaalpha = {NULL, NULL, NULL, alphaalpha_incdec};
+struct MenuItem *mia_alphaalpha[] = {&mi_alphaalpha};
+struct Menu alpha_alpha_menu = {"AlphaAlpha", ARRAY_LEN(mia_alphaalpha), mia_alphaalpha};
+
+struct MenuItem mi_alpha1 = {"Alpha1", &alpha_alpha_menu, &menu_show, NULL};
+struct MenuItem mi_beta1 = {"Beta1", NULL, NULL, NULL};
+struct MenuItem mi_gamma1 = {"Gamma1", NULL, NULL, NULL};
+struct MenuItem mi_delta1 = {"Delta1", NULL, NULL, NULL};
+struct MenuItem *mia_alpha[] = {&mi_alpha1, &mi_beta1, &mi_gamma1, &mi_delta1};
+struct Menu alpha_menu = {"Alpha", ARRAY_LEN(mia_alpha), mia_alpha};
+
+struct MenuItem mi_alpha2 = {"Alpha2", NULL, NULL, NULL};
+struct MenuItem mi_beta2 = {"Beta2", NULL, NULL, NULL};
+struct MenuItem mi_gamma2 = {"Gamma2", NULL, NULL, NULL};
+struct MenuItem mi_delta2 = {"Delta2", NULL, NULL, NULL};
+struct MenuItem *mia_beta[] = {&mi_alpha2, &mi_beta2, &mi_gamma2, &mi_delta2};
+struct Menu beta_menu = {"Beta", ARRAY_LEN(mia_beta), mia_beta};
+
+struct MenuItem mi_alpha3 = {"Alpha3", NULL, NULL, NULL};
+struct MenuItem mi_beta3 = {"Beta3", NULL, NULL, NULL};
+struct MenuItem mi_gamma3 = {"Gamma3", NULL, NULL, NULL};
+struct MenuItem mi_delta3 = {"Delta3", NULL, NULL, NULL};
+struct MenuItem *mia_gamma[] = {&mi_alpha3, &mi_beta3, &mi_gamma3, &mi_delta3};
+struct Menu gamma_menu = {"Gamma", ARRAY_LEN(mia_gamma), mia_gamma};
+
+struct MenuItem mi_alpha4 = {"Alpha4", NULL, NULL, NULL};
+struct MenuItem mi_beta4 = {"Beta4", NULL, NULL, NULL};
+struct MenuItem mi_gamma4 = {"Gamma4", NULL, NULL, NULL};
+struct MenuItem mi_delta4 = {"Delta4", NULL, NULL, NULL};
+struct MenuItem *mia_delta[] = {&mi_alpha4, &mi_beta4, &mi_gamma4, &mi_delta4};
+struct Menu delta_menu = {"Delta", ARRAY_LEN(mia_delta), mia_delta};
+
+struct MenuItem mi_alpha = {"Alpha", &alpha_menu, &menu_show, NULL};
+struct MenuItem mi_beta = {"Beta", &beta_menu, &menu_show, NULL};
+struct MenuItem mi_gamma = {"Gamma", &gamma_menu, &menu_show, NULL};
+struct MenuItem mi_delta = {"Delta", &delta_menu, &menu_show, NULL};
+struct MenuItem *mia_test[] = {&mi_alpha, &mi_beta, &mi_gamma, &mi_delta};
+struct Menu test_menu = {"Menu", ARRAY_LEN(mia_test), mia_test};
+
 
 // draw the Save, Restore or Delete screen
-void savresdel_display(struct Menu *menu, int slot_num)
+void savresdel_show(struct Menu *menu, int slot_num)
 {
   Frequency freq;
   SelOffset offset;
@@ -1016,55 +1287,40 @@ void savresdel_display(struct Menu *menu, int slot_num)
   lcd.write("Hz");
 }
 
-// show that *something* happened
-void action_flash(void)
-{
-  lcd.noDisplay();
-  delay(100);
-  lcd.display();
-  delay(100);
-  lcd.noDisplay();
-  delay(100);
-  lcd.display();
-}
-
 void save_select(struct Menu *menu, int slot_num)
 {
+  savresdel_show(menu, slot_num);
+
+  while (true)
+  {
+    
+  }
   // display an 'action flash'
-  action_flash();
+  menu_flash();
   
   put_slot(slot_num, VfoFrequency, VfoSelectDigit);
 
-  savresdel_display(menu, slot_num);
+  savresdel_show(menu, slot_num);
 }
 
 void restore_select(struct Menu *menu, int slot_num)
 {
   // display an 'action flash'
-  action_flash();
+  menu_flash();
   
   get_slot(slot_num, VfoFrequency, VfoSelectDigit);
 
-  savresdel_display(menu, slot_num);
+//  savresdel_show(menu, slot_num);  NOT NEEDED?
 }
 
 void delete_select(struct Menu *menu, int slot_num)
 {
   // display an 'action flash'
-  action_flash();
+  menu_flash();
   
   put_slot(slot_num, 0L, 0);
 
-  savresdel_display(menu, slot_num);
-}
-
-void settings_select(struct Menu *menu, int slot_num)
-{
-  Serial.print("settings_select() called, slot_num="); Serial.println(slot_num);
-  if (slot_num == 0)
-      show_menu(&brightness_menu);
-  else if (slot_num == 1)
-      show_menu(&contrast_menu);
+//  savresdel_show(menu, slot_num);  NOT NEEDED?
 }
 
 void contrast_select(struct Menu *menu, int slot_num)
@@ -1087,7 +1343,7 @@ void contrast_select(struct Menu *menu, int slot_num)
     LcdContrast = 125;
   analogWrite(mc_Contrast, LcdContrast);
   Serial.print("Set contrast to "); Serial.println(LcdContrast);
-  action_flash();
+  menu_flash();
 }
 
 void brightness_select(struct Menu *menu, int slot_num)
@@ -1108,7 +1364,7 @@ void brightness_select(struct Menu *menu, int slot_num)
 
   analogWrite(mc_Brightness, LcdBrightness);
   Serial.print("Set brightness to "); Serial.println(LcdBrightness);
-  action_flash();  
+  menu_flash();  
 }
 
 //----------------------------------------------------------
@@ -1161,9 +1417,9 @@ void loop(void)
         Serial.println("vfo_Click event ignored");
         break;
       case vfo_HoldClick:
-        Serial.println("Got vfo_HoldClick: calling show_menu()");
-        show_menu(&main_menu);
-        save_to_eeprom();  // save any changes made in the menu syste,
+        Serial.println("Got vfo_HoldClick: calling menu_show()");
+        menu_show(&test_menu, 0);
+        save_to_eeprom();  // save any changes made
         show_main_screen();
         break;
       default:
