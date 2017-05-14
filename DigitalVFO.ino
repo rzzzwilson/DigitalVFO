@@ -304,7 +304,7 @@ void ltobbuff(char *buf, int bufsize, Frequency value)
 typedef void (*ItemSelection)(Menu *, int);
 
 // handler for inc/dec of item (vfo_RRight, vfo_RLeft events)
-typedef int (*ItemIncDec)(int index, int delta);
+typedef void (*ItemIncDec)(int delta);
 
 // structure defining a menu item
 struct MenuItem
@@ -326,6 +326,18 @@ struct Menu
 };
 
 typedef struct Menu *MenuPtr;
+
+void dump_menuitem(const char *msg, struct MenuItem *menuitem)
+{
+  Serial.println("-------------------------------------------");
+  Serial.println(msg);
+  Serial.print("menuitem address="); Serial.println((unsigned long) menuitem, HEX);
+  Serial.print("  item_title="); Serial.println(menuitem->item_title);
+  Serial.print("  menu="); Serial.println((unsigned long) menuitem->menu, HEX);
+  Serial.print("  action="); Serial.println((unsigned long) menuitem->action, HEX);
+  Serial.print("  incdec="); Serial.println((unsigned long) menuitem->incdec, HEX);
+  Serial.println("-------------------------------------------");
+}
 
 //----------------------------------------
 // actually draw the menu on the screen
@@ -381,9 +393,15 @@ void menu_show(struct Menu *menu, int item_num)
 
   // decide if draw menuitem or a dynamic display
   if (menu->num_items == 1)
-    (menu->items[item_num]->incdec)(item_num, 0);  // draw without modifying
+  {
+    Serial.println("Calling ->incdec()");
+    (menu->items[item_num]->incdec)(0);  // draw without modifying
+    Serial.println("After ->incdec()");
+  }
   else
     menuitem_draw(menu, item_num);
+
+  Serial.println("Start of menu_show() loop");
   
   while (true)
   {
@@ -392,6 +410,7 @@ void menu_show(struct Menu *menu, int item_num)
     {
       // get next event and handle it
       byte event = pop_event();
+      Serial.print("menu_show() loop: event="); Serial.println(event2display(event));
 
       switch (event)
       {
@@ -400,11 +419,7 @@ void menu_show(struct Menu *menu, int item_num)
           if (menu->num_items == 1)
           {
             // special dynamic menuitem
-            Serial.print("special dynamic menuitem, before item_num="); Serial.println(item_num);
-            Serial.print("menu->items[item_num]->incdec=");
-            Serial.println((unsigned long) menu->items[item_num]->incdec);
-            item_num = menu->items[item_num]->incdec(item_num, -1);
-            Serial.print("after item_num="); Serial.println(item_num);
+            menu->items[item_num]->incdec(-1);
           }
           else
           {
@@ -414,26 +429,11 @@ void menu_show(struct Menu *menu, int item_num)
           }
           break;
         case vfo_RRight:
-          Serial.print("Menu: vfo_RRight, menu=");
-          Serial.print((unsigned long) menu);
-          Serial.print(", menu->num_items=");
-          Serial.print(menu->num_items);
-          Serial.print(", menu->items[item_num]->incdec=");
-          Serial.println((unsigned long) menu->items[item_num]->incdec);
+          Serial.println("Menu: vfo_RRight");
           if (menu->num_items == 1)
           {
             // special dynamic menuitem
-            Serial.print("special dynamic menuitem, before item_num=");
-            Serial.print(item_num);
-            Serial.print(", menu->items[item_num]->incdec=");
-            Serial.println((unsigned long) menu->items[item_num]->incdec);
-            
-            item_num = menu->items[item_num]->incdec(item_num, +1);
-            
-            Serial.print("AFTER menu->items[item_num]->incdec=");
-            Serial.print((unsigned long) menu->items[item_num]->incdec);
-            Serial.print(", item_num=");
-            Serial.println(item_num);
+            menu->items[item_num]->incdec(+1);
           }
           else
           {
@@ -441,13 +441,6 @@ void menu_show(struct Menu *menu, int item_num)
             if (++item_num >= menu->num_items)
               item_num = menu->num_items - 1;
           }
-          Serial.print("Menu: AFTER vfo_RRight, menu=");
-          Serial.print((unsigned long) menu);
-          Serial.print(", menu->num_items=");
-          Serial.print(menu->num_items);
-          Serial.print(", menu->items[item_num]->incdec=");
-          Serial.println((unsigned long) menu->items[item_num]->incdec);
-          Serial.print("Menu: vfo_RRight, new item_num="); Serial.println(item_num);
           break;
         case vfo_DnRLeft:
           Serial.println("Menu: vfo_DnRLeft");
@@ -483,7 +476,7 @@ void menu_show(struct Menu *menu, int item_num)
 
       // update the menu display
       if (menu->num_items == 1)
-        (menu->items[item_num]->incdec)(item_num, 0);  // draw without modifying
+        (menu->items[item_num]->incdec)(0);  // draw without modifying
       else
         menuitem_draw(menu, item_num);
     }
@@ -517,6 +510,9 @@ int queue_aft = 0;    // aft pointer into circular buffer
 
 void push_event(VFOEvent event)
 {
+  Serial.print("push_event: new event="); Serial.print(event);
+  Serial.print(" = "); Serial.println(event2display(event));
+
   // put new event into next empty slot
   event_queue[queue_fore] = event;
 
@@ -1178,40 +1174,45 @@ void alphaalpha_action(Menu *menu, int slot_num)
   Serial.println(slot_num);
 }
 
-#define MaxSlotNum 10
-
-int alphaalpha_incdec(int slot_num, int delta)
+void brightness_incdec(int delta)
 {
-  Serial.print("alphaalpha_incdec: slot_num=");
-  Serial.println(slot_num);
-
-  // first, bump the internal index, limit to range
-  slot_num += delta;
-  if (slot_num < 0)
-    slot_num = 0;
-  else
-    if (slot_num >= MaxSlotNum)
-      slot_num = MaxSlotNum - 1;
-
-  Serial.print("alphaalpha_incdec: drawing bar length ");
-  Serial.println(slot_num + 1);
-//  lcd.write(ALLSET_CHAR);
-  // draw the row 1 reresentation of the value
+  Serial.print("brightness_incdec: delta="); Serial.println(delta);
+  
+  // convert brighness value to a display value in [1, 16]
+  int index = (LcdBrightness + 1) / 16;
+    
+  if (delta != 0)
+  {
+    Serial.print("Old LcdBrightness="); Serial.print(LcdBrightness);
+    Serial.print(", index="); Serial.println(index);
+    
+    // first, bump the internal index, limit to range
+    index += delta;
+    if (index < 1)
+      index = 1;
+    else
+      if (index > 16)
+        index = 16;
+  
+    Serial.print("New LcdBrightness="); Serial.print(LcdBrightness);
+    Serial.print(", index="); Serial.println(index);
+  
+    // put brightness back into global variable and adjust display brightness
+    LcdBrightness = (index * 16) - 1;
+    analogWrite(mc_Brightness, LcdBrightness);
+  }
+  
+  // draw the row 1 representation of the value
   lcd.setCursor(0, 1);
   lcd.write(BlankRow);
   lcd.setCursor(0, 1);
-  for (int i = 0; i <= slot_num; ++i)
+  for (int i = 0; i < index; ++i)
   {
     lcd.write(ALLSET_CHAR);
   }
-  
-  Serial.print("alphaalpha_action: returning ");
-  Serial.println(slot_num);
-  
-  return slot_num;
 }
 
-struct MenuItem mi_alphaalpha = {NULL, NULL, NULL, alphaalpha_incdec};
+struct MenuItem mi_alphaalpha = {NULL, NULL, NULL, brightness_incdec};
 struct MenuItem *mia_alphaalpha[] = {&mi_alphaalpha};
 struct Menu alpha_alpha_menu = {"AlphaAlpha", ARRAY_LEN(mia_alphaalpha), mia_alphaalpha};
 
