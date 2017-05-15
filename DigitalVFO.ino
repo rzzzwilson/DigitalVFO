@@ -304,7 +304,7 @@ void ltobbuff(char *buf, int bufsize, Frequency value)
 typedef void (*ItemSelection)(Menu *, int);
 
 // handler for inc/dec of custom item (vfo_RRight, vfo_RLeft events)
-typedef void (*ItemIncDec)(int delta);
+typedef int (*ItemIncDec)(int item_num, int delta);
 
 // structure defining a menu item
 struct MenuItem
@@ -399,7 +399,7 @@ void menuitem_draw_std(struct Menu *menu, int item_num)
 void menuitem_draw(struct Menu *menu, int item_num)
 {
   if (menu->num_items == 1)
-    (menu->items[item_num]->incdec)(0);  // draw without modifying
+    (menu->items[item_num]->incdec)(item_num, 0);  // draw without modifying
   else
     menuitem_draw_std(menu, item_num);
 }
@@ -416,18 +416,16 @@ void menu_show(struct Menu *menu, int item_num)
   //Serial.print("menu_show: menu="); Serial.print((unsigned long) menu, HEX);
   dump_menu("menu_show, menu:", menu);
   Serial.print("item_num="); Serial.println(item_num);
-  
+
   // get rid of any stray events to this point
   flush_events();
 
   // draw the menu page
   menu_draw(menu);
 
-  dump_menuitem("menu_show, menuitem:", menu->items[item_num]);
-  
   // decide if drawing menuitem or a dynamic display
   if (menu->num_items == 1)
-    (menu->items[item_num]->incdec)(0);  // draw without modifying
+    (menu->items[item_num]->incdec)(item_num, 0);  // draw without modifying
   else
     menuitem_draw(menu, item_num);
 
@@ -449,7 +447,8 @@ void menu_show(struct Menu *menu, int item_num)
           if (menu->num_items == 1)
           {
             // special dynamic menuitem
-            menu->items[item_num]->incdec(-1);
+            item_num = menu->items[0]->incdec(item_num, -1);
+            Serial.print("After vfo_RLeft, item_num="); Serial.println(item_num);
           }
           else
           {
@@ -463,7 +462,11 @@ void menu_show(struct Menu *menu, int item_num)
           if (menu->num_items == 1)
           {
             // special dynamic menuitem
-            menu->items[item_num]->incdec(+1);
+            Serial.print("calling incdec(");
+            Serial.print(item_num);
+            Serial.println(", +1)");
+            item_num = menu->items[0]->incdec(item_num, +1);
+            Serial.print("after vfo_RRight, item_num="); Serial.println(item_num);
           }
           else
           {
@@ -471,6 +474,7 @@ void menu_show(struct Menu *menu, int item_num)
             if (++item_num >= menu->num_items)
               item_num = menu->num_items - 1;
           }
+          Serial.println("point 1");
           break;
         case vfo_DnRLeft:
           Serial.println("Menu: vfo_DnRLeft");
@@ -487,10 +491,13 @@ void menu_show(struct Menu *menu, int item_num)
           
           // if there's a handler, call it
           // this will probably destroy the curent menu page
-          if (menu->items[item_num]->action != NULL)
+          if (menu->items[0]->action != NULL)
           {
             Serial.println("Calling vfo_Click handler");
-            (*menu->items[item_num]->action)(menu->items[item_num]->menu, 0);
+            Serial.print("menu->items[0]->action="); 
+            Serial.print((unsigned long) menu->items[0]->action, HEX);
+            Serial.print(", item_num="); Serial.println(item_num);
+            (*menu->items[0]->action)(menu->items[0]->menu, item_num);
           }
 
           menu_draw(menu);    // redraw the menu header
@@ -504,14 +511,24 @@ void menu_show(struct Menu *menu, int item_num)
           Serial.print("Menu: unrecognized event "); Serial.println(event);
           break;
       }
+Serial.println("point 2");
 
       // update the menu display
       if (menu->num_items == 1)
-        (menu->items[item_num]->incdec)(0);  // draw without modifying
+      {
+        Serial.println("point 3");
+        Serial.print("????: item_num="); Serial.print(item_num);
+        Serial.print(", menu->items[0]->incdec=");
+        Serial.println((unsigned long) menu->items[0]->incdec, HEX);
+        (menu->items[0]->incdec)(item_num, 0);  // draw without modifying
+        Serial.println("point 4");
+      }
       else
+      {
+        Serial.println("point 5");
         menuitem_draw(menu, item_num);
-
-      dump_menuitem("menu_show: new menuitem=", menu->items[item_num]);
+        Serial.println("point 6");
+      }
     }
   }
 }
@@ -658,7 +675,7 @@ void print_freq(Frequency freq, int sel_col, int row)
   ltobbuff(buf, MAX_FREQ_CHARS, freq);
 
   lcd.createChar(SELECT_CHAR, sel_digits[int(buf[index])]);
-  lcd.setCursor(NUM_COLS - MAX_FREQ_CHARS - 2, 0);
+  lcd.setCursor(NUM_COLS - MAX_FREQ_CHARS - 2, row);
   for (int i = 0; i < MAX_FREQ_CHARS; ++i)
   {
     int char_val = buf[i];
@@ -1149,23 +1166,65 @@ void saveslot_show(Menu *menu, int slot_num)
 
 void saveslot_action(Menu *menu, int item_num)
 {
-  Serial.println("saveslot_action() entered");
+  Serial.print("saveslot_action() entered, item_num=");
+  Serial.println(item_num);
 
   // display an 'action' flash
   menu_flash();
 
   put_slot(item_num, VfoFrequency, VfoSelectDigit);
 
-  savresdel_show(menu, item_num);
+//  savresdel_show(menu, item_num);
 }
 
 //----------------------------------------
 // cycle through the save slots
 //----------------------------------------
 
-void saveslot_incdec(int delta)
+int saveslot_incdec(int item_num, int delta)
 {
-  
+  Frequency freq;
+  SelOffset offset;
+
+  Serial.print("saveslot_incdec: item_num="); Serial.print(item_num);
+  Serial.print(", delta="); Serial.println(delta);
+
+  if (delta != 0)
+  {
+    Serial.print("Old item_num="); Serial.println(item_num);
+
+    // bump the slot number, limit to [0, 9]
+    item_num += delta;
+    if (item_num < 0)
+      item_num = 0;
+    else
+      if (item_num > 9)
+        item_num = 9;
+
+    Serial.print("New item_num="); Serial.println(item_num);
+  }
+
+  // draw the row 1 representation of the value
+  Serial.println("Xpoint 1");
+  get_slot(item_num, freq, offset);
+  Serial.println("Xpoint 2");
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  if (VfoFrequency == freq)
+  {
+    lcd.setCursor(0, 1);
+    lcd.write("*");
+  }
+  Serial.println("Xpoint 3");
+  lcd.setCursor(4, 1);
+  lcd.write(item_num + '0');
+  lcd.write(":");
+  Serial.println("Xpoint 4");
+  print_freq(freq, -1, 1);
+  Serial.println("Xpoint 5");
+
+  Serial.print("saveslot_incdec: returning item_num="); Serial.println(item_num);
+  return item_num;
 }
 
 //----------------------------------------
@@ -1188,9 +1247,9 @@ void restoreslot_action(Menu *menu, int item_num)
 // cycle through the slots
 //----------------------------------------
 
-void restoreslot_incdec(int delta)
+int restoreslot_incdec(int item_num, int delta)
 {
-  
+  return item_num;
 }
 
 //----------------------------------------
@@ -1213,9 +1272,50 @@ void deleteslot_action(Menu *menu, int item_num)
 // cycle through the slots
 //----------------------------------------
 
-void deleteslot_incdec(int delta)
+int deleteslot_incdec(int item_num, int delta)
 {
-  
+  Frequency freq;
+  SelOffset offset;
+
+  Serial.print("deleteslot_incdec: item_num="); Serial.print(item_num);
+  Serial.print(", delta="); Serial.println(delta);
+
+  if (delta != 0)
+  {
+    Serial.print("Old item_num="); Serial.println(item_num);
+
+    // bump the slot number, limit to [0, 9]
+    item_num += delta;
+    if (item_num < 0)
+      item_num = 0;
+    else
+      if (item_num > 9)
+        item_num = 9;
+
+    Serial.print("New item_num="); Serial.println(item_num);
+  }
+
+  // draw the row 1 representation of the value
+  Serial.println("Xpoint 1");
+  get_slot(item_num, freq, offset);
+  Serial.println("Xpoint 2");
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  if (VfoFrequency == freq)
+  {
+    lcd.setCursor(0, 1);
+    lcd.write("*");
+  }
+  Serial.println("Xpoint 3");
+  lcd.setCursor(4, 1);
+  lcd.write(item_num + '0');
+  lcd.write(":");
+  Serial.println("Xpoint 4");
+  print_freq(freq, -1, 1);
+  Serial.println("Xpoint 5");
+
+  Serial.print("saveslot_incdec: returning item_num="); Serial.println(item_num);
+  return item_num;
 }
 
 //----------------------------------------
@@ -1235,7 +1335,7 @@ void brightness_action(Menu *menu, int item_num)
 // adjust the LCD brightness up or down and update menu display
 //----------------------------------------
 
-void brightness_incdec(int delta)
+int brightness_incdec(int item_num, int delta)
 {
   Serial.print("brightness_incdec: delta="); Serial.println(delta);
   
@@ -1271,6 +1371,8 @@ void brightness_incdec(int delta)
   {
     lcd.write(ALLSET_CHAR);
   }
+
+  return item_num;
 }
 
 //----------------------------------------
@@ -1290,7 +1392,7 @@ void contrast_action(Menu *menu, int item_num)
 // adjust the LCD contrast up or down and update menu display
 //----------------------------------------
 
-void contrast_incdec(int delta)
+int contrast_incdec(int item_num, int delta)
 {
   Serial.print("contrast_incdec: delta="); Serial.println(delta);
   
@@ -1326,6 +1428,8 @@ void contrast_incdec(int delta)
   {
     lcd.write(ALLSET_CHAR);
   }
+
+  return item_num;
 }
 
 //----------------------------------------
@@ -1467,56 +1571,6 @@ void delete_select(struct Menu *menu, int slot_num)
   put_slot(slot_num, 0L, 0);
 
 //  savresdel_show(menu, slot_num);  NOT NEEDED?
-}
-
-//----------------------------------------
-//----------------------------------------
-
-void contrast_select(struct Menu *menu, int slot_num)
-{
-  Serial.print("contrast_select(): slot_num="); Serial.println(slot_num);
-
-  // adjust contrast
-  // +/- opposite to that for brightness because increasing
-  // voltage has the opposite effect with contrast
-  if (slot_num == 0)        // "increase" item selected 
-    LcdContrast -= 10;
-  else if (slot_num == 1)   // "decrease" item selected
-    LcdContrast += 10;
-  else
-    abort("Bad slot number");
-
-  if (LcdContrast < 0)
-    LcdContrast = 0;
-  if (LcdContrast > 125)
-    LcdContrast = 125;
-  analogWrite(mc_Contrast, LcdContrast);
-  Serial.print("Set contrast to "); Serial.println(LcdContrast);
-  menu_flash();
-}
-
-//----------------------------------------
-//----------------------------------------
-
-void brightness_select(struct Menu *menu, int slot_num)
-{
-  Serial.print("brightness_select(): slot_num="); Serial.println(slot_num);
-  
-  if (slot_num == 0)        // "increase" item selected 
-    LcdBrightness += 10;
-  else if (slot_num == 1)   // "increase" item selected 
-    LcdBrightness -= 10;
-  else
-    abort("Bad slot numvber");
-
-  if (LcdBrightness < 0)
-    LcdBrightness = 0;
-  if (LcdBrightness > 255)
-    LcdBrightness = 255;
-
-  analogWrite(mc_Brightness, LcdBrightness);
-  Serial.print("Set brightness to "); Serial.println(LcdBrightness);
-  menu_flash();  
 }
 
 //----------------------------------------
