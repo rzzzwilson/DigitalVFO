@@ -141,12 +141,12 @@ int LcdBrightness = 255;
 // Utility routines
 ////////////////////////////////////////////////////////////////////////////////
 
-//----------------------------------------------------------
+//----------------------------------------
 // Abort the program.
 // Tries to tell the world what went wrong, then just loops.
 //     msg  address of error string
 // Only first 32 chars of message is displayed.
-//----------------------------------------------------------
+//----------------------------------------
 
 void abort(const char *msg)
 {
@@ -191,9 +191,9 @@ void abort(const char *msg)
   }
 }
 
-//----------------------------------------------------------
+//----------------------------------------
 // Convert an event number to a display string
-//----------------------------------------------------------
+//----------------------------------------
 
 const char * event2display(VFOEvent event)
 {
@@ -210,9 +210,9 @@ const char * event2display(VFOEvent event)
   }
 }
 
-//----------------------------------------------------------
-// display a simple banner
-//----------------------------------------------------------
+//----------------------------------------
+// display a simple banner on the LCD
+//----------------------------------------
 
 void banner(void)
 {
@@ -242,7 +242,7 @@ void banner(void)
   delay(500);
 }
 
-//----------------------------------------------------------
+//----------------------------------------
 // Function to convert a Frequency into an array of decimal digit values.
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
@@ -252,7 +252,7 @@ void banner(void)
 //
 // For example, given the value 1234 and a buffer of length 7, will fill the
 // buffer with "   1234".  Given 123456789 it will fill with "3456789".
-//----------------------------------------------------------
+//----------------------------------------
 
 void ltochbuff(char *buf, int bufsize, Frequency value)
 {
@@ -271,7 +271,7 @@ void ltochbuff(char *buf, int bufsize, Frequency value)
   }
 }
 
-//----------------------------------------------------------
+//----------------------------------------
 // Function to convert a Frequency into an array of byte digit values.
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
@@ -280,7 +280,7 @@ void ltochbuff(char *buf, int bufsize, Frequency value)
 //
 // For example, given the value 1234 and a buffer of length 7, will fill the
 // buffer with 0001234.  Given 123456789 it will fill with 3456789.
-//----------------------------------------------------------
+//----------------------------------------
 
 void ltobbuff(char *buf, int bufsize, Frequency value)
 {
@@ -303,13 +303,13 @@ void ltobbuff(char *buf, int bufsize, Frequency value)
 // handler for selection of an item (vfo_Click event)
 typedef void (*ItemSelection)(Menu *, int);
 
-// handler for inc/dec of item (vfo_RRight, vfo_RLeft events)
+// handler for inc/dec of custom item (vfo_RRight, vfo_RLeft events)
 typedef void (*ItemIncDec)(int delta);
 
 // structure defining a menu item
 struct MenuItem
 {
-  const char *item_title;     // menu item display text
+  const char *title;          // menu item display text
   struct Menu *menu;          // menu to use after selection
   ItemSelection action;       // routine to handle select on the item
   ItemIncDec incdec;          // routine to handle inc/dec on the item
@@ -327,25 +327,35 @@ struct Menu
 
 typedef struct Menu *MenuPtr;
 
+void dump_menu(const char *msg, struct Menu *menu)
+{
+  Serial.println("----------------- Menu --------------------");
+  Serial.println(msg);
+  Serial.print("menu address="); Serial.println((unsigned long) menu, HEX);
+  Serial.print("  title="); Serial.println(menu->title);
+  Serial.print("  num_items="); Serial.println(menu->num_items);
+  Serial.print("  items address="); Serial.println((unsigned long) menu->items, HEX);
+  Serial.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+}
+
 void dump_menuitem(const char *msg, struct MenuItem *menuitem)
 {
-  Serial.println("-------------------------------------------");
+  Serial.println("--------------- MenuItem ------------------");
   Serial.println(msg);
   Serial.print("menuitem address="); Serial.println((unsigned long) menuitem, HEX);
-  Serial.print("  item_title="); Serial.println(menuitem->item_title);
+  Serial.print("  title="); Serial.println(menuitem->title);
   Serial.print("  menu="); Serial.println((unsigned long) menuitem->menu, HEX);
   Serial.print("  action="); Serial.println((unsigned long) menuitem->action, HEX);
   Serial.print("  incdec="); Serial.println((unsigned long) menuitem->incdec, HEX);
-  Serial.println("-------------------------------------------");
+  Serial.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
 }
 
 //----------------------------------------
-// actually draw the menu on the screen
+// Draw the menu on the screen
 //     menu      pointer to a Menu structure
-//     item_num  the item number to show
 //----------------------------------------
 
-void menu_draw(struct Menu *menu, int item_num)
+void menu_draw(struct Menu *menu)
 {
   // clear screen and write menu title on upper row
   lcd.clear();
@@ -353,14 +363,19 @@ void menu_draw(struct Menu *menu, int item_num)
   lcd.write(menu->title);
 }
 
-void menuitem_draw(struct Menu *menu, int item_num)
+//----------------------------------------
+// Draw a standard menuitem on the screen
+//     menu      pointer to a Menu structure
+//     item_num  the item number to show
+//----------------------------------------
+void menuitem_draw_std(struct Menu *menu, int item_num)
 {
   // figure out max length of item strings
   int max_len = 0;
 
   for (int i = 0; i < menu->num_items; ++ i)
   {
-    int new_len = strlen(menu->items[i]->item_title);
+    int new_len = strlen(menu->items[i]->title);
 
     if (new_len > max_len)
         max_len = new_len;
@@ -370,34 +385,49 @@ void menuitem_draw(struct Menu *menu, int item_num)
   lcd.setCursor(0, 1);
   lcd.write(BlankRow);
   lcd.setCursor(NUM_COLS - max_len, 1);
-  lcd.write(menu->items[item_num]->item_title);
+  lcd.write(menu->items[item_num]->title);
   
+}
+
+//----------------------------------------
+// Draw a standard or custom menuitem on the screen.
+//     menu      pointer to a Menu structure
+//     item_num  the item number to show
+// Decides if this is a standard or custom menuitem.
+//----------------------------------------
+
+void menuitem_draw(struct Menu *menu, int item_num)
+{
+  if (menu->num_items == 1)
+    (menu->items[item_num]->incdec)(0);  // draw without modifying
+  else
+    menuitem_draw_std(menu, item_num);
 }
 
 //----------------------------------------
 // Draw a menu page from the passed "menu" structure.
 //     menu      pointer to a defining Menu structure
 //     item_num  number of item to initially display
+// Handle events in the loop here.
 //----------------------------------------
 
 void menu_show(struct Menu *menu, int item_num)
 {
-  Serial.print("menu_show: menu="); Serial.print((unsigned long) menu);
-  Serial.print(", item_num="); Serial.println(item_num);
+  //Serial.print("menu_show: menu="); Serial.print((unsigned long) menu, HEX);
+  dump_menu("menu_show, menu:", menu);
+  Serial.print("item_num="); Serial.println(item_num);
   
   // get rid of any stray events to this point
   flush_events();
 
   // draw the menu page
-  menu_draw(menu, item_num);
+  menu_draw(menu);
 
-  // decide if draw menuitem or a dynamic display
+  dump_menuitem("menu_show, menuitem:", menu->items[item_num]);
+  
+  // decide if drawing menuitem or a dynamic display
   if (menu->num_items == 1)
-  {
-    Serial.println("Calling ->incdec()");
     (menu->items[item_num]->incdec)(0);  // draw without modifying
-    Serial.println("After ->incdec()");
-  }
   else
     menuitem_draw(menu, item_num);
 
@@ -453,16 +483,17 @@ void menu_show(struct Menu *menu, int item_num)
           Serial.print(menu->title);
           Serial.print(", item_num=");
           Serial.print(item_num); Serial.print(", menu->items[item_num]->action=");
-          Serial.println((unsigned long) menu->items[item_num]->action);
+          Serial.println((unsigned long) menu->items[item_num]->action, HEX);
           
           // if there's a handler, call it
+          // this will probably destroy the curent menu page
           if (menu->items[item_num]->action != NULL)
           {
             Serial.println("Calling vfo_Click handler");
             (*menu->items[item_num]->action)(menu->items[item_num]->menu, 0);
           }
 
-          menu_draw(menu, item_num);    // redraw the menu header
+          menu_draw(menu);    // redraw the menu header
           Serial.println("Menu: end of vfo_Click handling");
           break;
         case vfo_HoldClick:
@@ -479,12 +510,17 @@ void menu_show(struct Menu *menu, int item_num)
         (menu->items[item_num]->incdec)(0);  // draw without modifying
       else
         menuitem_draw(menu, item_num);
+
+      dump_menuitem("menu_show: new menuitem=", menu->items[item_num]);
     }
   }
 }
 
+//----------------------------------------
 // show that *something* happened
 // flashes the menu page in a possibly eye-catching way
+//----------------------------------------
+
 void menu_flash(void)
 {
   lcd.noDisplay();
@@ -603,7 +639,7 @@ void dump_queue(const char *msg)
 // Utility routines for the display.
 ////////////////////////////////////////////////////////////////////////////////
 
-//----------------------------------------------------------
+//----------------------------------------
 // Print the frequency on the display with selected colum underlined.
 //     freq     the frequency to display
 //     sel_col  the selection offset of digit to underline
@@ -611,7 +647,7 @@ void dump_queue(const char *msg)
 //     row      the row to use, 0 is at top
 // The row and columns used to show frequency digits are defined elsewhere.
 // A final "Hz" is written.
-//----------------------------------------------------------
+//----------------------------------------
 
 void print_freq(Frequency freq, int sel_col, int row)
 {
@@ -669,9 +705,9 @@ volatile byte aFlag = 0;
 // expecting rising edge on pinA - at detent
 volatile byte bFlag = 0;
 
-//----------------------------------------------------------
+//----------------------------------------
 // Setup the encoder stuff, pins, etc.
-//----------------------------------------------------------
+//----------------------------------------
 
 void re_setup(int position)
 {
@@ -802,7 +838,10 @@ const int SaveOffsetBaseSize = NumSaveSlots * SaveOffsetSize;
 // free slot address
 const int NextFreeAddress = SaveOffsetBase + SaveOffsetBaseSize;
 
+//----------------------------------------
 // save VFO state to EEPROM
+//----------------------------------------
+
 void save_to_eeprom(void)
 {
   Serial.println("save_to_eeprom() called");
@@ -813,7 +852,10 @@ void save_to_eeprom(void)
   EEPROM.put(AddressContrast, LcdContrast);
 }
 
+//----------------------------------------
 // restore VFO state from EEPROM
+//----------------------------------------
+
 void restore_from_eeprom(void)
 {
   EEPROM.get(AddressFreq, VfoFrequency);
@@ -822,7 +864,10 @@ void restore_from_eeprom(void)
   EEPROM.get(AddressContrast, LcdContrast);
 }
 
+//----------------------------------------
 // given slot number, return freq/offset
+//----------------------------------------
+
 void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
 {
   int freq_address = SaveFreqBase + slot_num * SaveFreqSize;
@@ -832,7 +877,10 @@ void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
   EEPROM.get(offset_address, offset);
 }
 
+//----------------------------------------
 // put frequency/offset into given slot number
+//----------------------------------------
+
 void put_slot(int slot_num, Frequency freq, SelOffset offset)
 {
   Serial.print("put_slot: slot_num="); Serial.print(slot_num);
@@ -848,7 +896,10 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
   EEPROM.put(offset_address, offset);
 }
 
+//----------------------------------------
 // print all EEPROM saved data to console
+//----------------------------------------
+
 void dump_eeprom(void)
 {
   Frequency ulong;
@@ -877,6 +928,9 @@ void dump_eeprom(void)
   Serial.println("=================================================");
 }
 
+//----------------------------------------
+//----------------------------------------
+
 void get_vfo_freq_offset(Frequency &freq, SelOffset &offset)
 {
   EEPROM.get(AddressFreq, freq);
@@ -890,13 +944,19 @@ void get_vfo_freq_offset(Frequency &freq, SelOffset &offset)
 // Andrew Smallbone <andrew@rocketnumbernine.com>
 ////////////////////////////////////////////////////////////////////////////////
 
+//----------------------------------------
+//----------------------------------------
+
 void dds_pulse_high(byte pin)
 {
   digitalWrite(pin, HIGH);
   digitalWrite(pin, LOW);
 }
 
+//----------------------------------------
 // transfer a byte a bit at a time LSB first to DATA
+//----------------------------------------
+
 void dds_tfr_byte(byte data)
 {
   for (int i = 0; i < 8; ++i, data >>= 1)
@@ -906,7 +966,10 @@ void dds_tfr_byte(byte data)
   }
 }
 
+//----------------------------------------
 // frequency of signwave (datasheet page 12) will be <sys clock> * <frequency tuning word> / 2^32
+//----------------------------------------
+
 void update_dds60(Frequency frequency)
 {
   int32_t freq = frequency * 4294967296.0 / 180.0e6;
@@ -922,6 +985,9 @@ void update_dds60(Frequency frequency)
   dds_tfr_byte(0x001);
   dds_pulse_high(FQ_UD);
 }
+
+//----------------------------------------
+//----------------------------------------
 
 void dds_setup()
 {
@@ -943,9 +1009,9 @@ void dds_setup()
 // Main VFO code
 ////////////////////////////////////////////////////////////////////////////////
 
-//----------------------------------------------------------
+//----------------------------------------
 // The standard Arduino setup() function.
-//----------------------------------------------------------
+//----------------------------------------
 
 void zero_slots(void)
 {
@@ -999,11 +1065,12 @@ void setup(void)
   if (pop_event() == vfo_HoldClick)
   {
     LcdBrightness = DefaultLcdBrightness;
-    LcdContrast = DefaultLcdContrast;
-    Serial.print("Reset brightness to "); Serial.print(LcdBrightness);
     analogWrite(mc_Brightness, LcdBrightness);
-    Serial.print(" and contrast to "); Serial.println(LcdContrast);
+    LcdContrast = DefaultLcdContrast;
     analogWrite(mc_Contrast, LcdContrast);
+
+    Serial.print("Reset (not saved) brightness to "); Serial.print(LcdBrightness);
+    Serial.print(" and contrast to "); Serial.println(LcdContrast);
   }
 #endif
 
@@ -1022,6 +1089,9 @@ void setup(void)
   flush_events();
 }
 
+//----------------------------------------
+//----------------------------------------
+
 void show_main_screen(void)
 {
   lcd.clear();
@@ -1030,10 +1100,10 @@ void show_main_screen(void)
   print_freq(VfoFrequency, VfoSelectDigit, 0);
 }
 
-//-----
+//----------------------------------------
 // Define the menu handler routines.
 // These actually do the work, everything else is just navigation.
-//-----
+//----------------------------------------
 
 // show a save slot, draw in row 1
 void saveslot_show(Menu *menu, int slot_num)
@@ -1073,7 +1143,10 @@ void saveslot_show(Menu *menu, int slot_num)
   lcd.write("Hz");
 }
 
+//----------------------------------------
 // save the current frequency to a slot
+//----------------------------------------
+
 void saveslot_action(Menu *menu, int item_num)
 {
   Serial.println("saveslot_action() entered");
@@ -1086,8 +1159,20 @@ void saveslot_action(Menu *menu, int item_num)
   savresdel_show(menu, item_num);
 }
 
+//----------------------------------------
+// cycle through the save slots
+//----------------------------------------
+
+void saveslot_incdec(int delta)
+{
+  
+}
+
+//----------------------------------------
 // restore the current frequency from a slot
-void restoreslot_show(Menu *menu, int item_num)
+//----------------------------------------
+
+void restoreslot_action(Menu *menu, int item_num)
 {
   Serial.println("restoreslot_show() entered");
 
@@ -1099,8 +1184,20 @@ void restoreslot_show(Menu *menu, int item_num)
   savresdel_show(menu, item_num);  
 }
 
+//----------------------------------------
+// cycle through the slots
+//----------------------------------------
+
+void restoreslot_incdec(int delta)
+{
+  
+}
+
+//----------------------------------------
 // delete the frequency in a slot
-void deleteslot_show(Menu *menu, int item_num)
+//----------------------------------------
+
+void deleteslot_action(Menu *menu, int item_num)
 {
   Serial.println("deleteslot_show() entered");
 
@@ -1112,67 +1209,31 @@ void deleteslot_show(Menu *menu, int item_num)
   savresdel_show(menu, item_num);    
 }
 
-// increase/decrease the display brightness
-void set_brightness(Menu *menu, int item_num)
-{
-  Serial.println("set_brightness() entered");
+//----------------------------------------
+// cycle through the slots
+//----------------------------------------
 
+void deleteslot_incdec(int delta)
+{
   
 }
 
-// increase/decrease the display contrast
-void set_contrast(Menu *menu, int item_num)
-{
-  Serial.println("set_contrast() entered");
+//----------------------------------------
+// save the current brightness to EEPROM
+//----------------------------------------
 
-  
+void brightness_action(Menu *menu, int item_num)
+{
+  Serial.println("brightness_action() entered");
+
+  // display an 'action' flash, save brightness to EEPROM
+  menu_flash();
+  save_to_eeprom();
 }
 
-//-----
-// settings menu
-//-----
-
-#ifdef JUNK
-struct MenuItem mi_brightness = {"Brightness", NULL, set_brightness, NULL};
-struct MenuItem mi_contrast = {"Contrast", NULL, set_contrast, NULL};
-struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast};
-
-//#define NumSettingsMenuItems (sizeof(mia_settings)/sizeof(struct MenuItem *))
-
-struct Menu settings_menu = {"Settings", ARRAY_LEN(mia_settings), mia_settings};
-
-//-----
-// "save slot" menu
-//-----
-
-struct MenuItem mi_saveslot = {NULL, NULL, saveslot_action, saveslot_show};
-struct MenuItem *mia_saveslot[] = {&mi_saveslot};
-
-struct Menu saveslot_menu = {"Save slot", ARRAY_LEN(mia_saveslot), mia_saveslot};
-
-//-----
-// main menu
-//-----
-
-struct MenuItem save = {"Save slot", &saveslot_menu, &menu_show, NULL};
-struct MenuItem restore = {"Restore slot", NULL, &menu_show, NULL};
-struct MenuItem del = {"Delete slot", NULL, &menu_show, NULL};
-struct MenuItem settings = {"Settings", &settings_menu, &menu_show, NULL};
-struct MenuItem *m_menu[] = {&save, &restore, &del, &settings};
-
-//#define NumMainMenuItems (sizeof(m_menu)/sizeof(struct MenuItem *))
-//#define NumMainMenuItems ARRAY_LEN(m_menu)
-
-struct Menu main_menu = {"Menu", ARRAY_LEN(m_menu), m_menu};
-#endif
-
-void alphaalpha_action(Menu *menu, int slot_num)
-{
-  Serial.print("alphaalpha_action: menu=");
-  Serial.print((unsigned long) menu);
-  Serial.print(", slot_num=");
-  Serial.println(slot_num);
-}
+//----------------------------------------
+// adjust the LCD brightness up or down and update menu display
+//----------------------------------------
 
 void brightness_incdec(int delta)
 {
@@ -1212,47 +1273,122 @@ void brightness_incdec(int delta)
   }
 }
 
-struct MenuItem mi_alphaalpha = {NULL, NULL, NULL, brightness_incdec};
-struct MenuItem *mia_alphaalpha[] = {&mi_alphaalpha};
-struct Menu alpha_alpha_menu = {"AlphaAlpha", ARRAY_LEN(mia_alphaalpha), mia_alphaalpha};
+//----------------------------------------
+// save the current contrast to EEPROM
+//----------------------------------------
 
-struct MenuItem mi_alpha1 = {"Alpha1", &alpha_alpha_menu, &menu_show, NULL};
-struct MenuItem mi_beta1 = {"Beta1", NULL, NULL, NULL};
-struct MenuItem mi_gamma1 = {"Gamma1", NULL, NULL, NULL};
-struct MenuItem mi_delta1 = {"Delta1", NULL, NULL, NULL};
-struct MenuItem *mia_alpha[] = {&mi_alpha1, &mi_beta1, &mi_gamma1, &mi_delta1};
-struct Menu alpha_menu = {"Alpha", ARRAY_LEN(mia_alpha), mia_alpha};
+void contrast_action(Menu *menu, int item_num)
+{
+  Serial.println("contrast_action() entered");
 
-struct MenuItem mi_alpha2 = {"Alpha2", NULL, NULL, NULL};
-struct MenuItem mi_beta2 = {"Beta2", NULL, NULL, NULL};
-struct MenuItem mi_gamma2 = {"Gamma2", NULL, NULL, NULL};
-struct MenuItem mi_delta2 = {"Delta2", NULL, NULL, NULL};
-struct MenuItem *mia_beta[] = {&mi_alpha2, &mi_beta2, &mi_gamma2, &mi_delta2};
-struct Menu beta_menu = {"Beta", ARRAY_LEN(mia_beta), mia_beta};
+  // display an 'action' flash, save contrast to EEPROM
+  save_to_eeprom();
+  menu_flash();
+}
 
-struct MenuItem mi_alpha3 = {"Alpha3", NULL, NULL, NULL};
-struct MenuItem mi_beta3 = {"Beta3", NULL, NULL, NULL};
-struct MenuItem mi_gamma3 = {"Gamma3", NULL, NULL, NULL};
-struct MenuItem mi_delta3 = {"Delta3", NULL, NULL, NULL};
-struct MenuItem *mia_gamma[] = {&mi_alpha3, &mi_beta3, &mi_gamma3, &mi_delta3};
-struct Menu gamma_menu = {"Gamma", ARRAY_LEN(mia_gamma), mia_gamma};
+//----------------------------------------
+// adjust the LCD contrast up or down and update menu display
+//----------------------------------------
 
-struct MenuItem mi_alpha4 = {"Alpha4", NULL, NULL, NULL};
-struct MenuItem mi_beta4 = {"Beta4", NULL, NULL, NULL};
-struct MenuItem mi_gamma4 = {"Gamma4", NULL, NULL, NULL};
-struct MenuItem mi_delta4 = {"Delta4", NULL, NULL, NULL};
-struct MenuItem *mia_delta[] = {&mi_alpha4, &mi_beta4, &mi_gamma4, &mi_delta4};
-struct Menu delta_menu = {"Delta", ARRAY_LEN(mia_delta), mia_delta};
+void contrast_incdec(int delta)
+{
+  Serial.print("contrast_incdec: delta="); Serial.println(delta);
+  
+  // convert brighness value to a display value in [1, 16]
+  int index = 16 - LcdContrast / 8;
+    
+  if (delta != 0)
+  {
+    Serial.print("Old LcdContrast="); Serial.print(LcdContrast);
+    Serial.print(", index="); Serial.println(index);
+    
+    // first, bump the internal index, limit to range
+    index += delta;
+    if (index < 1)
+      index = 1;
+    else
+      if (index > 16)
+        index = 16;
+  
+    Serial.print("New LcdContrast="); Serial.print(LcdContrast);
+    Serial.print(", index="); Serial.println(index);
+  
+    // put brightness back into global variable and adjust display brightness
+    LcdContrast = (16 - index) * 8;
+    analogWrite(mc_Contrast, LcdContrast);
+  }
+  
+  // draw the row 1 representation of the value
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  lcd.setCursor(0, 1);
+  for (int i = 0; i < index; ++i)
+  {
+    lcd.write(ALLSET_CHAR);
+  }
+}
 
-struct MenuItem mi_alpha = {"Alpha", &alpha_menu, &menu_show, NULL};
-struct MenuItem mi_beta = {"Beta", &beta_menu, &menu_show, NULL};
-struct MenuItem mi_gamma = {"Gamma", &gamma_menu, &menu_show, NULL};
-struct MenuItem mi_delta = {"Delta", &delta_menu, &menu_show, NULL};
-struct MenuItem *mia_test[] = {&mi_alpha, &mi_beta, &mi_gamma, &mi_delta};
-struct Menu test_menu = {"Menu", ARRAY_LEN(mia_test), mia_test};
+//----------------------------------------
+// Brightness & Contrast menu with custom menuitems
+//----------------------------------------
+
+struct MenuItem mic_brightness = {NULL, NULL, brightness_action, brightness_incdec};
+struct MenuItem *miac_brightness[] = {&mic_brightness};
+struct Menu brightness_menu = {"Brightness", ARRAY_LEN(miac_brightness), miac_brightness};
+
+struct MenuItem mic_contrast = {NULL, NULL, contrast_action, contrast_incdec};
+struct MenuItem *miac_contrast[] = {&mic_contrast};
+struct Menu contrast_menu = {"Contrast", ARRAY_LEN(miac_contrast), miac_contrast};
+
+//----------------------------------------
+// Settings menu
+//----------------------------------------
+
+struct MenuItem mi_brightness = {"Brightness", &brightness_menu, &menu_show, NULL};
+struct MenuItem mi_contrast = {"Contrast", &contrast_menu, &menu_show, NULL};
+struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast};
+struct Menu settings_menu = {"Settings", ARRAY_LEN(mia_settings), mia_settings};
+
+//----------------------------------------
+// "save slot" menu
+//----------------------------------------
+
+struct MenuItem mi_saveslot = {"Save slot", NULL, saveslot_action, saveslot_incdec};
+struct MenuItem *mia_saveslot[] = {&mi_saveslot};
+struct Menu saveslot_menu = {"Save slot", ARRAY_LEN(mia_saveslot), mia_saveslot};
+
+//----------------------------------------
+// "restore slot" menu
+//----------------------------------------
+
+struct MenuItem mi_restoreslot = {"Restore slot", NULL, restoreslot_action, restoreslot_incdec};
+struct MenuItem *mia_restoreslot[] = {&mi_restoreslot};
+struct Menu restoreslot_menu = {"Restore slot", ARRAY_LEN(mia_restoreslot), mia_restoreslot};
+
+//----------------------------------------
+// "delete slot" menu
+//----------------------------------------
+
+struct MenuItem mi_deleteslot = {"Delete slot", NULL, deleteslot_action, deleteslot_incdec};
+struct MenuItem *mia_deleteslot[] = {&mi_deleteslot};
+struct Menu deleteslot_menu = {"Delete slot", ARRAY_LEN(mia_deleteslot), mia_deleteslot};
+
+//----------------------------------------
+// main menu
+//----------------------------------------
+
+struct MenuItem mi_save = {"Save slot", &saveslot_menu, &menu_show, NULL};
+struct MenuItem mi_restore = {"Restore slot", &restoreslot_menu, &menu_show, NULL};
+struct MenuItem mi_del = {"Delete slot", &deleteslot_menu, &menu_show, NULL};
+struct MenuItem mi_settings = {"Settings", &settings_menu, &menu_show, NULL};
+struct MenuItem *mia_main[] = {&mi_save, &mi_restore, &mi_del, &mi_settings};
+struct Menu menu_main = {"Menu", ARRAY_LEN(mia_main), mia_main};
 
 
+//----------------------------------------
 // draw the Save, Restore or Delete screen
+//----------------------------------------
+
 void savresdel_show(struct Menu *menu, int slot_num)
 {
   Frequency freq;
@@ -1288,6 +1424,9 @@ void savresdel_show(struct Menu *menu, int slot_num)
   lcd.write("Hz");
 }
 
+//----------------------------------------
+//----------------------------------------
+
 void save_select(struct Menu *menu, int slot_num)
 {
   savresdel_show(menu, slot_num);
@@ -1304,6 +1443,9 @@ void save_select(struct Menu *menu, int slot_num)
   savresdel_show(menu, slot_num);
 }
 
+//----------------------------------------
+//----------------------------------------
+
 void restore_select(struct Menu *menu, int slot_num)
 {
   // display an 'action flash'
@@ -1314,6 +1456,9 @@ void restore_select(struct Menu *menu, int slot_num)
 //  savresdel_show(menu, slot_num);  NOT NEEDED?
 }
 
+//----------------------------------------
+//----------------------------------------
+
 void delete_select(struct Menu *menu, int slot_num)
 {
   // display an 'action flash'
@@ -1323,6 +1468,9 @@ void delete_select(struct Menu *menu, int slot_num)
 
 //  savresdel_show(menu, slot_num);  NOT NEEDED?
 }
+
+//----------------------------------------
+//----------------------------------------
 
 void contrast_select(struct Menu *menu, int slot_num)
 {
@@ -1347,6 +1495,9 @@ void contrast_select(struct Menu *menu, int slot_num)
   menu_flash();
 }
 
+//----------------------------------------
+//----------------------------------------
+
 void brightness_select(struct Menu *menu, int slot_num)
 {
   Serial.print("brightness_select(): slot_num="); Serial.println(slot_num);
@@ -1368,9 +1519,9 @@ void brightness_select(struct Menu *menu, int slot_num)
   menu_flash();  
 }
 
-//----------------------------------------------------------
+//----------------------------------------
 // Standard Arduino loop() function.
-//----------------------------------------------------------
+//----------------------------------------
 
 void loop(void)
 {
@@ -1419,7 +1570,11 @@ void loop(void)
         break;
       case vfo_HoldClick:
         Serial.println("Got vfo_HoldClick: calling menu_show()");
-        menu_show(&test_menu, 0);
+
+  Serial.print("brightness_menu="); Serial.println((unsigned long) &brightness_menu, HEX);
+  Serial.print("mic_brightness="); Serial.println((unsigned long) &mic_brightness, HEX);
+
+        menu_show(&menu_main, 0);
         save_to_eeprom();  // save any changes made
         show_main_screen();
         break;
