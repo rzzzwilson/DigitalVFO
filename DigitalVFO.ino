@@ -18,8 +18,8 @@
 // macro to get number of elements in an array
 #define ARRAY_LEN(a)    (sizeof(a)/sizeof(a[0]))
 
-//#define RESET   // define if resetting all EEPROM data
-#define DEBUG   // define if debugging
+//#define VFO_RESET   // define if resetting all EEPROM data
+//#define VFO_DEBUG   // define if debugging
 
 
 // Digital VFO program name & version
@@ -113,6 +113,9 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 #define vfo_Click     5
 #define vfo_HoldClick 6
 
+// the "in use" display character
+#define IN_USE_CHAR   0x7e
+
 // default LCD contrast & brightness
 const int DefaultLcdContrast = 70;
 const int DefaultLcdBrightness = 150;
@@ -171,19 +174,19 @@ void abort(const char *msg)
   {
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.write(buf);
+    lcd.print(buf);
     lcd.setCursor(0, 1);
-    lcd.write(buf + NUM_COLS);
+    lcd.print(buf + NUM_COLS);
     delay(2000);
 
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.write(" ");   // padding to centre name+version
-    lcd.write(ProgramName);
-    lcd.write(" ");
-    lcd.write(Version);
+    lcd.print(" ");   // padding to centre name+version
+    lcd.print(ProgramName);
+    lcd.print(" ");
+    lcd.print(Version);
     lcd.setCursor(0, 1);
-    lcd.write("   is paused");
+    lcd.print("   is paused");
     delay(2000);
   }
 }
@@ -211,29 +214,29 @@ const char * event2display(VFOEvent event)
 // display a simple banner on the LCD
 //----------------------------------------
 
-#ifndef DEBUG
+#ifndef VFO_DEBUG
 void banner(void)
 {
   Serial.print(ProgramName); Serial.print(" "); Serial.print(Version);
   Serial.print(" ("); Serial.print(Callsign); Serial.println(")");
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.write(ProgramName);
-  lcd.write(" ");
-  lcd.write(Version);
+  lcd.print(ProgramName);
+  lcd.print(" ");
+  lcd.print(Version);
   lcd.setCursor(0, 1);
-  lcd.write(Callsign);
+  lcd.print(Callsign);
   delay(2000);    // wait a bit
 
   for (int i = 0; i <= NUM_COLS; ++i)
   {
     lcd.clear();
     lcd.setCursor(i, 0);
-    lcd.write(ProgramName);
-    lcd.write(" ");
-    lcd.write(Version);
+    lcd.print(ProgramName);
+    lcd.print(" ");
+    lcd.print(Version);
     lcd.setCursor(0, 1);
-    lcd.write(Callsign16 + i);
+    lcd.print(Callsign16 + i);
     delay(200);
   }
 
@@ -323,7 +326,7 @@ struct Menu
   struct MenuItem **items;    // array of pointers to MenuItem data
 };
 
-#ifdef DEBUG
+#ifdef VFO_DEBUG
 // dump a MenuItem to the console
 // only called from dump_menu()
 void dump_menuitem(struct MenuItem *menuitem)
@@ -359,7 +362,7 @@ void menu_draw(struct Menu *menu)
   // clear screen and write menu title on upper row
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.write(menu->title);
+  lcd.print(menu->title);
 }
 
 //----------------------------------------
@@ -383,9 +386,9 @@ void menuitem_draw(struct Menu *menu, int item_num)
 
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
-  lcd.write(BlankRow);
+  lcd.print(BlankRow);
   lcd.setCursor(NUM_COLS - max_len, 1);
-  lcd.write(menu->items[item_num]->title);
+  lcd.print(menu->items[item_num]->title);
 }
 
 //----------------------------------------
@@ -400,24 +403,24 @@ void menu_show(struct Menu *menu, int unused)
 {
   int item_num = 0;     // index of the menuitem to show
 
-#ifdef DEBUG
+#ifdef VFO_DEBUG
   dump_menu("menu_show, menu:", menu);
 #endif
-
-  // get rid of any stray events to this point
-  flush_events();
 
   // draw the menu page
   menu_draw(menu);
   menuitem_draw(menu, item_num);
 
+  // get rid of any stray events to this point
+  event_flush();
+
   while (true)
   {
     // handle any pending event
-    if (events_pending() > 0)
+    if (event_pending() > 0)
     {
       // get next event and handle it
-      byte event = pop_event();
+      byte event = event_pop();
       Serial.print("menu_show loop: event="); Serial.println(event2display(event));
 
       switch (event)
@@ -439,6 +442,7 @@ void menu_show(struct Menu *menu, int unused)
           Serial.println("menu_show: vfo_DnRRight (ignored)");
           break;
         case vfo_Click:
+          Serial.println("menu_show: vfo_Click");
           if (menu->items[item_num]->action != NULL)
           {
             // if there's a handler, call it
@@ -455,7 +459,7 @@ void menu_show(struct Menu *menu, int unused)
           break;
         case vfo_HoldClick:
           Serial.println("menu_show: vfo_HoldClick, exit menu");
-          flush_events();
+          event_flush();
           return;
         default:
           Serial.print("menu_show: unrecognized event "); Serial.println(event);
@@ -496,7 +500,7 @@ VFOEvent event_queue[QueueLength];
 int queue_fore = 0;   // fore pointer into circular buffer
 int queue_aft = 0;    // aft pointer into circular buffer
 
-void push_event(VFOEvent event)
+void event_push(VFOEvent event)
 {
   // put new event into next empty slot
   event_queue[queue_fore] = event;
@@ -509,12 +513,12 @@ void push_event(VFOEvent event)
   // if queue full, abort
   if (queue_aft == queue_fore)
   {
-      dump_queue("ERROR: event queue full:");
+      event_dump_queue("ERROR: event queue full:");
       abort("Event queue full");
   }
 }
 
-VFOEvent pop_event(void)
+VFOEvent event_pop(void)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
@@ -536,7 +540,7 @@ VFOEvent pop_event(void)
   return event;
 }
 
-int events_pending(void)
+int event_pending(void)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
@@ -553,13 +557,13 @@ int events_pending(void)
   return result;
 }
 
-void flush_events(void)
+void event_flush(void)
 {
   queue_fore = 0;
   queue_aft = 0;
 }
 
-void dump_queue(const char *msg)
+void event_dump_queue(const char *msg)
 {
   // Must protect from RE code fiddling with queue
   noInterrupts();
@@ -575,7 +579,7 @@ void dump_queue(const char *msg)
     Serial.print(" -> ");
     Serial.println(event2display(event));
   }
-  Serial.print("Queue length="); Serial.println(events_pending());
+  Serial.print("Queue length="); Serial.println(event_pending());
   Serial.print("queue_aft="); Serial.print(queue_aft);
   Serial.print(", queue_fore="); Serial.println(queue_fore);
   Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
@@ -631,7 +635,7 @@ void print_freq(Frequency freq, int sel_col, int row)
     }
   }
 
-  lcd.write("Hz");
+  lcd.print("Hz");
 }
 
 
@@ -641,7 +645,12 @@ void print_freq(Frequency freq, int sel_col, int row)
 ////////////////////////////////////////////////////////////////////////////////
 
 // time when click becomes a "hold click" (milliseconds)
-#define HoldClickTime 500
+// the delay is configurable in the UI
+#define MinHoldClickTime        100
+#define MaxHoldClickTime        1000
+#define DefaultHoldClickTime    500
+
+int ReHoldClickTime = DefaultHoldClickTime;
 
 // internal variables
 bool re_rotation = false;       // true if rotation occurred while knob down
@@ -685,15 +694,15 @@ void pinPush_isr(void)
     // button released, check if rotation, UP event if not
     if (! re_rotation)
     {
-      unsigned long push_time = millis() - re_down_time;
+      int push_time = millis() - re_down_time;
 
-      if (push_time < HoldClickTime)
+      if (push_time < ReHoldClickTime)
       {
-        push_event(vfo_Click);
+        event_push(vfo_Click);
       }
       else
       {
-        push_event(vfo_HoldClick);
+        event_push(vfo_HoldClick);
       }
     }
   }
@@ -708,12 +717,12 @@ void pinA_isr(void)
     // this pin's rising edge
     if (re_down)
     {
-      push_event(vfo_DnRLeft);
+      event_push(vfo_DnRLeft);
       re_rotation = true;
     }
     else
     {
-      push_event(vfo_RLeft);
+      event_push(vfo_RLeft);
     }
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
@@ -734,12 +743,12 @@ void pinB_isr(void)
     // this pin's rising edge
     if (re_down)
     {
-      push_event(vfo_DnRRight);
+      event_push(vfo_DnRRight);
       re_rotation = true;
     }
     else
     {
-      push_event(vfo_RRight);
+      event_push(vfo_RRight);
     }
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
@@ -775,11 +784,15 @@ const int AddressContrastSize = sizeof(LcdContrast);
 const int AddressBrightness = AddressContrast + AddressContrastSize;
 const int AddressBrightnessSize = sizeof(LcdBrightness);
 
+// address for int 'hold click time'
+const int AddressHoldClickTime = AddressBrightness + AddressBrightnessSize;
+const int AddressHoldClickTimeSize = sizeof(ReHoldClickTime);
+
 // number of frequency save slots in EEPROM
 const int NumSaveSlots = 10;
 
 const int SaveFreqSize = sizeof(long);
-const int SaveFreqBase = AddressBrightness + AddressBrightnessSize;
+const int SaveFreqBase = AddressHoldClickTime + AddressHoldClickTimeSize;
 const int SaveFreqBaseSize = NumSaveSlots * SaveFreqSize;
 
 //also save the offset for each frequency
@@ -800,6 +813,7 @@ void save_to_eeprom(void)
   EEPROM.put(AddressSelDigit, VfoSelectDigit);
   EEPROM.put(AddressBrightness, LcdBrightness);
   EEPROM.put(AddressContrast, LcdContrast);
+  EEPROM.put(AddressHoldClickTime, ReHoldClickTime);
 }
 
 //----------------------------------------
@@ -812,6 +826,7 @@ void restore_from_eeprom(void)
   EEPROM.get(AddressSelDigit, VfoSelectDigit);
   EEPROM.get(AddressBrightness, LcdBrightness);
   EEPROM.get(AddressContrast, LcdContrast);
+  EEPROM.get(AddressHoldClickTime, ReHoldClickTime);
 }
 
 //----------------------------------------
@@ -844,23 +859,26 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 // print all EEPROM saved data to console
 //----------------------------------------
 
-#ifdef DEBUG
+#ifdef VFO_DEBUG
 void dump_eeprom(void)
 {
   Frequency ulong;
   SelOffset offset;
   int brightness;
   int contrast;
+  int hold;
 
   EEPROM.get(AddressFreq, ulong);
   EEPROM.get(AddressSelDigit, offset);
   EEPROM.get(AddressBrightness, brightness);
   EEPROM.get(AddressContrast, contrast);
+  EEPROM.get(AddressHoldClickTime, hold);
   Serial.println("=================================================");
   Serial.print("dump_eeprom: VfoFrequency="); Serial.println(ulong);
   Serial.print("             AddressSelDigit="); Serial.println(offset);
   Serial.print("             LcdBrightness="); Serial.println(brightness);
   Serial.print("             LcdContrast="); Serial.println(contrast);
+  Serial.print("             ReHoldClickTime="); Serial.println(hold);
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
@@ -952,20 +970,22 @@ void dds_setup(void)
 // The standard Arduino setup() function.
 //----------------------------------------
 
-#ifdef RESET
-void zero_slots(void)
+#ifdef VFO_RESET
+void zero_eeprom(void)
 {
   Frequency zero_freq = 0L;
   SelOffset zero_offset = 0;
-
+  
   // zero the frequency+selected values
   VfoFrequency = MIN_FREQ;
   VfoSelectDigit = 0;
   LcdBrightness = DefaultLcdBrightness;
   LcdContrast = DefaultLcdContrast;
+  ReHoldClickTime = DefaultHoldClickTime;
   
   save_to_eeprom();
 
+  // zero the save slots
   for (int i = 0; i < NumSaveSlots; ++i)
   {
     put_slot(i, zero_freq, zero_offset);
@@ -977,8 +997,8 @@ void setup(void)
 {
   Serial.begin(115200);
 
-#ifdef RESET
-  zero_slots();
+#ifdef VFO_RESET
+  zero_eeprom();
   Serial.println("All EEPROM data reset");
 #endif
 
@@ -1003,31 +1023,44 @@ void setup(void)
   re_setup(VfoSelectDigit);
 
   // show program name and version number
-#ifndef DEBUG
+#ifndef VFO_DEBUG
   banner();
-  if (pop_event() == vfo_HoldClick)
+
+  // we might have got a 'reset' HoldClick during banner presentation
+  if (event_pop() == vfo_HoldClick)
   {
-    // if holdClick during banner, reset brightness/contrast
+    // if holdClick during banner, reset all "Settings" values
     LcdBrightness = DefaultLcdBrightness;
     analogWrite(mc_Brightness, LcdBrightness);
     LcdContrast = DefaultLcdContrast;
     analogWrite(mc_Contrast, LcdContrast);
+    ReHoldClickTime = DefaultHoldClickTime;
 
-    Serial.print("Reset brightness to "); Serial.print(LcdBrightness);
-    Serial.print(" and contrast to "); Serial.println(LcdContrast);
-
+    // tell what happened on LCD
     lcd.clear();
-    lcd.write("Reset Contrast");
+    lcd.print("Reset all values");
     lcd.setCursor(0, 1);
-    lcd.write("and Brightness");
-    delay(3000);
+    lcd.print("in Settings menu");
+
+    // and Serial console
+    Serial.print("Reset brightness to "); Serial.print(LcdBrightness);
+    Serial.print(", contrast to "); Serial.print(LcdContrast);
+    Serial.print(" and hold time to "); Serial.println(ReHoldClickTime);
+    Serial.println("Select or rotate the rotary encoder to continue");
+
+    // wait here until there is some input action
+    event_flush();
+    while (! event_pending())
+      delay(100);
+    event_flush();
+    delay(500);
   }
 #endif
 
   // we sometimes see random events on powerup, flush them here
-  flush_events();
+  event_flush();
   
-#ifdef DEBUG
+#ifdef VFO_DEBUG
   // dump EEPROM values
   dump_eeprom();
 #endif
@@ -1036,7 +1069,7 @@ void setup(void)
   show_main_screen();
 
   // we sometimes see random events on powerup, flush them here
-  flush_events();
+  event_flush();
 }
 
 //----------------------------------------
@@ -1046,7 +1079,7 @@ void show_main_screen(void)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.write("Freq:");
+  lcd.print("Freq:");
   print_freq(VfoFrequency, VfoSelectDigit, 0);
 }
 
@@ -1061,15 +1094,15 @@ void show_slot_frequency(int slot_num)
 
   get_slot(slot_num, freq, offset);
   lcd.setCursor(0, 1);
-  lcd.write(BlankRow);
+  lcd.print(BlankRow);
   if (VfoFrequency == freq)
   {
     lcd.setCursor(0, 1);
-    lcd.write("*");
+    lcd.write(IN_USE_CHAR);
   }
   lcd.setCursor(4, 1);
   lcd.write(slot_num + '0');
-  lcd.write(":");
+  lcd.print(":");
   print_freq(freq, -1, 1);
 }
 
@@ -1084,11 +1117,11 @@ void saveslot_action(struct Menu *menu, int item_num)
   int slot_num = 0;       // the slot we are viewing/saving
 
   // get rid of any stray events to this point
-  flush_events();
+  event_flush();
 
   // draw row 0 of menu
   lcd.clear();
-  lcd.write(menu->items[item_num]->title);
+  lcd.print(menu->items[item_num]->title);
   
   // show row slot info on row 1
   show_slot_frequency(slot_num);
@@ -1097,9 +1130,9 @@ void saveslot_action(struct Menu *menu, int item_num)
   while (true)
   {
     // handle any pending event
-    if (events_pending() > 0)
+    if (event_pending() > 0)
     {
-      byte event = pop_event(); // get next event and handle it
+      byte event = event_pop(); // get next event and handle it
 
       switch (event)
       {
@@ -1117,7 +1150,7 @@ void saveslot_action(struct Menu *menu, int item_num)
           menu_flash();
           break;
         case vfo_HoldClick:
-          flush_events();
+          event_flush();
           return;
         default:
           // ignore any events we don't handle
@@ -1141,11 +1174,11 @@ void restoreslot_action(struct Menu *menu, int item_num)
   int slot_num = 0;       // the slot we are viewing/restoring
 
   // get rid of any stray events to this point
-  flush_events();
+  event_flush();
 
   // draw row 0 of menu
   lcd.clear();
-  lcd.write(menu->items[item_num]->title);
+  lcd.print(menu->items[item_num]->title);
   
   // show row slot info on row 1
   show_slot_frequency(slot_num);
@@ -1154,9 +1187,9 @@ void restoreslot_action(struct Menu *menu, int item_num)
   while (true)
   {
     // handle any pending event
-    if (events_pending() > 0)
+    if (event_pending() > 0)
     {
-      byte event = pop_event(); // get next event and handle it
+      byte event = event_pop(); // get next event and handle it
 
       switch (event)
       {
@@ -1173,7 +1206,7 @@ void restoreslot_action(struct Menu *menu, int item_num)
           menu_flash();
           break;
         case vfo_HoldClick:
-          flush_events();
+          event_flush();
           return;
         default:
           // ignore any events we don't handle
@@ -1199,11 +1232,11 @@ void deleteslot_action(struct Menu *menu, int item_num)
   int slot_num = 0;               // the slot we are viewing/restoring
 
   // get rid of any stray events to this point
-  flush_events();
+  event_flush();
 
   // draw row 0 of menu
   lcd.clear();
-  lcd.write(menu->items[item_num]->title);
+  lcd.print(menu->items[item_num]->title);
   
   // show row slot info on row 1
   show_slot_frequency(slot_num);
@@ -1212,9 +1245,9 @@ void deleteslot_action(struct Menu *menu, int item_num)
   while (true)
   {
     // handle any pending event
-    if (events_pending() > 0)
+    if (event_pending() > 0)
     {
-      byte event = pop_event(); // get next event and handle it
+      byte event = event_pop(); // get next event and handle it
 
       switch (event)
       {
@@ -1231,7 +1264,7 @@ void deleteslot_action(struct Menu *menu, int item_num)
           menu_flash();
           break;
         case vfo_HoldClick:
-          flush_events();
+          event_flush();
           return;
         default:
           // ignored events we don't handle
@@ -1252,14 +1285,14 @@ void deleteslot_action(struct Menu *menu, int item_num)
 void draw_row1_bar(int length)
 {
   lcd.setCursor(0, 1);
-  lcd.write(BlankRow);
+  lcd.print(BlankRow);
   lcd.setCursor(0, 1);
   for (int i = 0; i < length; ++i)
     lcd.write(ALLSET_CHAR);
 }
 
 //----------------------------------------
-// save the current brightness to EEPROM
+// Set the current contrast and save to EEPROM if 'actioned'.
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
 //----------------------------------------
@@ -1270,11 +1303,11 @@ void brightness_action(struct Menu *menu, int item_num)
   int index = (LcdBrightness + 1) / 16;
  
   // get rid of any stray events to this point
-  flush_events();
+  event_flush();
 
   // draw row 0 of menu, get heading from MenuItem
   lcd.clear();
-  lcd.write(menu->items[item_num]->title);
+  lcd.print(menu->items[item_num]->title);
   
   // show row slot info on row 1
   draw_row1_bar(index);
@@ -1283,9 +1316,9 @@ void brightness_action(struct Menu *menu, int item_num)
   while (true)
   {
     // handle any pending event
-    if (events_pending() > 0)
+    if (event_pending() > 0)
     {
-      byte event = pop_event(); // get next event and handle it
+      byte event = event_pop(); // get next event and handle it
 
       switch (event)
       {
@@ -1302,7 +1335,7 @@ void brightness_action(struct Menu *menu, int item_num)
           menu_flash();
           break;
         case vfo_HoldClick:
-          flush_events();
+          event_flush();
           return;
         default:
           // ignored events we don't handle
@@ -1320,7 +1353,7 @@ void brightness_action(struct Menu *menu, int item_num)
 }
 
 //----------------------------------------
-// save the current contrast to EEPROM
+// Set the current contrast and save to EEPROM if 'actioned'.
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
 //----------------------------------------
@@ -1331,11 +1364,11 @@ void contrast_action(struct Menu *menu, int item_num)
   int index = 16 - LcdContrast / 8;
  
   // get rid of any stray events to this point
-  flush_events();
+  event_flush();
 
   // draw row 0 of menu, get heading from MenuItem
   lcd.clear();
-  lcd.write(menu->items[item_num]->title);
+  lcd.print(menu->items[item_num]->title);
   
   // show row slot info on row 1
   draw_row1_bar(index);
@@ -1344,9 +1377,9 @@ void contrast_action(struct Menu *menu, int item_num)
   while (true)
   {
     // handle any pending event
-    if (events_pending() > 0)
+    if (event_pending() > 0)
     {
-      byte event = pop_event(); // get next event and handle it
+      byte event = event_pop(); // get next event and handle it
 
       switch (event)
       {
@@ -1363,7 +1396,7 @@ void contrast_action(struct Menu *menu, int item_num)
           menu_flash();
           break;
         case vfo_HoldClick:
-          flush_events();
+          event_flush();
           return;
         default:
           // ignored events we don't handle
@@ -1381,12 +1414,110 @@ void contrast_action(struct Menu *menu, int item_num)
 }
 
 //----------------------------------------
+// Draw a click hold time in milliseconds on row 1 of LCD.
+//----------------------------------------
+
+void draw_row1_time(int msec)
+{
+  Serial.print("draw_row1_time: msec="); Serial.print(msec);
+  Serial.print(", ReHoldClickTime="); Serial.println(ReHoldClickTime);
+  
+  lcd.setCursor(0, 1);
+  lcd.print(BlankRow);
+  
+  if (msec == ReHoldClickTime)
+  {
+    Serial.println("draw_row1_time: drawing *");
+    lcd.setCursor(0, 1);
+    lcd.write(IN_USE_CHAR);
+  }
+  
+  lcd.setCursor(8, 1);
+  if (msec < 1000)
+    lcd.setCursor(9, 1);
+  lcd.print(msec);
+  lcd.print("msec");
+}
+
+//----------------------------------------
+// Set the current 'hold click' time and save to EEPROM if 'actioned'.
+//   menu      address of 'calling' menu
+//   item_num  index of MenuItem we were actioned from
+// This works differently from brightness/contrast.  We show menuitems
+// of the time to use.
+//----------------------------------------
+
+void holdclick_action(struct Menu *menu, int item_num)
+{
+  Serial.println("holdclick_action: entered");
+
+  int holdtime = ReHoldClickTime;
+  
+// the step time for hold click
+#define HOLD_STEP   100
+
+  // get rid of any stray events to this point
+  event_flush();
+
+  // draw row 0 of menu, get heading from MenuItem
+  lcd.clear();
+  lcd.print(menu->items[item_num]->title);
+  
+  // show row slot info on row 1
+  draw_row1_time(holdtime);
+
+  // handle events in our own little event loop
+  while (true)
+  {
+    // handle any pending event
+    if (event_pending() > 0)
+    {
+      byte event = event_pop(); // get next event and handle it
+
+      switch (event)
+      {
+        case vfo_RLeft:
+          holdtime -= HOLD_STEP;
+          if (holdtime < MinHoldClickTime)
+            holdtime = MinHoldClickTime;
+          Serial.print("holdclick_action: vfo_RLeft, after holdtime=");
+          Serial.println(holdtime);
+          break;
+        case vfo_RRight:
+          holdtime += HOLD_STEP;
+          if (holdtime > MaxHoldClickTime)
+            holdtime = MaxHoldClickTime;
+          Serial.print("holdclick_action: vfo_RRight, after holdtime=");
+          Serial.println(holdtime);
+          break;
+        case vfo_Click:
+          ReHoldClickTime = holdtime;
+          save_to_eeprom();
+          menu_flash();
+          break;
+        case vfo_HoldClick:
+          event_flush();
+          return;
+        default:
+          // ignored events we don't handle
+          break;
+      }
+
+      // show hold time value in row 1
+      draw_row1_time(holdtime);
+    }
+  }
+}
+
+
+//----------------------------------------
 // Settings menu
 //----------------------------------------
 
 struct MenuItem mi_brightness = {"Brightness", NULL, &brightness_action};
 struct MenuItem mi_contrast = {"Contrast", NULL, &contrast_action};
-struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast};
+struct MenuItem mi_holdclick = {"Hold click", NULL, &holdclick_action};
+struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast, &mi_holdclick};
 struct Menu settings_menu = {"Settings", ARRAY_LEN(mia_settings), mia_settings};
 
 //----------------------------------------
@@ -1412,10 +1543,10 @@ void loop(void)
   int old_position = VfoSelectDigit;
 
   // handle all events in the queue
-  while (events_pending() > 0)
+  while (event_pending() > 0)
   {
     // get next event and handle it
-    VFOEvent event = pop_event();
+    VFOEvent event = event_pop();
 
     switch (event)
     {
