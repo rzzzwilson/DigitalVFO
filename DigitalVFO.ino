@@ -19,7 +19,7 @@
 #define ARRAY_LEN(a)    (sizeof(a)/sizeof(a[0]))
 
 //#define VFO_RESET   // define if resetting all EEPROM data
-//#define VFO_DEBUG   // define if debugging
+#define VFO_DEBUG   // define if debugging
 
 
 // Digital VFO program name & version
@@ -154,20 +154,16 @@ void abort(const char *msg)
   char *ptr = buf;
   
   // print error on console (maybe)
-  Serial.println(msg);
-  Serial.println("Teensy is paused!");
+  Serial.printf(F("message=%s\nTeensy is paused!\n"), msg);
 
   // truncate/pad message to 32 chars
   for (int i = 0; i < NUM_COLS*2; ++i)
     *ptr++ = ' ';
   *ptr = '\0';
-  Serial.print("buf='"); Serial.print(buf); Serial.println("'");
   
   strncpy(buf, msg, NUM_COLS*2);
-  Serial.print("buf='"); Serial.print(buf); Serial.println("'");
   if (strlen(msg) < NUM_COLS*2)
     strncpy(buf + strlen(msg), "                                ", NUM_COLS*2 - strlen(msg));
-  Serial.print("buf='"); Serial.print(buf); Serial.println("'");
 
   // show what we can on the display, forever
   while (1)
@@ -217,8 +213,8 @@ const char * event2display(VFOEvent event)
 #ifndef VFO_DEBUG
 void banner(void)
 {
-  Serial.print(ProgramName); Serial.print(" "); Serial.print(Version);
-  Serial.print(" ("); Serial.print(Callsign); Serial.println(")");
+  Serial.printf(F("%s %s (%s)\n"), ProgramName, Version, Callsign);
+
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(ProgramName);
@@ -245,47 +241,23 @@ void banner(void)
 #endif
 
 //----------------------------------------
-// Function to convert a Frequency into an array of decimal digit values.
+// Function to convert an unsigned long into an array of byte digit values.
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
 //     value    the Frequency value to convert
-// The function won't overflow the given buffer, it will truncate at the left.
-// Leading zeros are suppressed.
 //
-// For example, given the value 1234 and a buffer of length 7, will fill the
-// buffer with "   1234".  Given 123456789 it will fill with "3456789".
-//----------------------------------------
-
-void ltochbuff(char *buf, int bufsize, Frequency value)
-{
-  char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
-
-  for (int i = 0; i < bufsize; ++i)
-  {
-    int rem = value % 10;
-    char ch = char(rem + '0');
-
-    value = value / 10;
-    if (value == 0L && ch == '0')
-      *ptr-- = ' ';
-    else
-      *ptr-- = ch;
-  }
-}
-
-//----------------------------------------
-// Function to convert a Frequency into an array of byte digit values.
-//     buf      address of buffer for byte results
-//     bufsize  size of the 'buf' buffer
-//     value    the Frequency value to convert
 // The function won't overflow the given buffer, it will truncate at the left.
-//
 // For example, given the value 1234 and a buffer of length 7, will fill the
 // buffer with 0001234.  Given 123456789 it will fill with 3456789.
+//
+// Each byte in the buffer is a number in [0, 9], NOT ['0', '9'].
+// The resultant buffer does NOT have a terminating '\0'!
 //----------------------------------------
 
-void ltobbuff(char *buf, int bufsize, Frequency value)
+void ulong2buff(char *buf, int bufsize, unsigned long value)
 {
+  Serial.printf(F("ulong2buff: bufsize=%d, value=%ld\n"), bufsize, value);
+  
   char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
 
   for (int i = 0; i < bufsize; ++i)
@@ -294,6 +266,8 @@ void ltobbuff(char *buf, int bufsize, Frequency value)
 
     value = value / 10;
     *ptr-- = char(rem);
+
+    Serial.printf(F("long2buff: stored byte %d, i=%d\n"), rem, i);
   }
 }
 
@@ -331,24 +305,26 @@ struct Menu
 // only called from dump_menu()
 void dump_menuitem(struct MenuItem *menuitem)
 {
-  Serial.print("  menuitem address="); Serial.println((unsigned long) menuitem, HEX);
-  Serial.print("    title="); Serial.println(menuitem->title);
-  Serial.print("    menu="); Serial.println((unsigned long) menuitem->menu, HEX);
-  Serial.print("    action="); Serial.println((unsigned long) menuitem->action, HEX);
+  Serial.printf(F("  menuitem address=%08x\n"), menuitem);
+  Serial.printf(F("  title=%s\n"), menuitem->title);
+  Serial.printf(F("  menu=%08x\n"), menuitem->menu);
+  Serial.printf(F("  action=%08x\n"), menuitem->action);
 }
 
 // dump a Menu and contained MenuItems to the console
 void dump_menu(const char *msg, struct Menu *menu)
 {
-  Serial.println("----------------- Menu --------------------");
-  Serial.println(msg);
-  Serial.print("menu address="); Serial.println((unsigned long) menu, HEX);
-  Serial.print("  title="); Serial.println(menu->title);
-  Serial.print("  num_items="); Serial.println(menu->num_items);
-  Serial.print("  items address="); Serial.println((unsigned long) menu->items, HEX);
+  Serial.printf(F("----------------- Menu --------------------\n"));
+  Serial.printf(F("%s\n"), msg);
+  Serial.printf(F("menu address=%08x\n"), menu);
+  Serial.printf(F("  title=%s\n"), menu->title);
+  Serial.printf(F("  num_items=%d\n"), menu->num_items);
+  Serial.printf(F("  items address=%08x\n"), menu->items);
+  
   for (int i = 0; i < menu->num_items; ++i)
     dump_menuitem(menu->items[i]);
-  Serial.println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+    
+  Serial.printf(F("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"));
 }
 #endif
 
@@ -421,28 +397,28 @@ void menu_show(struct Menu *menu, int unused)
     {
       // get next event and handle it
       byte event = event_pop();
-      Serial.print("menu_show loop: event="); Serial.println(event2display(event));
+      Serial.printf(F("menu_show loop: event=%s\n"), event2display(event));
 
       switch (event)
       {
         case vfo_RLeft:
-          Serial.println("menu_show: vfo_RLeft");
+          Serial.printf(F("menu_show: vfo_RLeft\n"));
           if (--item_num < 0)
             item_num = 0;
           break;
         case vfo_RRight:
-          Serial.println("menu_show: vfo_RRight");
+          Serial.printf(F("menu_show: vfo_RRight\n"));
           if (++item_num >= menu->num_items)
             item_num = menu->num_items - 1;
           break;
         case vfo_DnRLeft:
-          Serial.println("menu_show: vfo_DnRLeft (ignored)");
+          Serial.printf(F("menu_show: vfo_DnRLeft (ignored)\n"));
           break;
         case vfo_DnRRight:
-          Serial.println("menu_show: vfo_DnRRight (ignored)");
+          Serial.printf(F("menu_show: vfo_DnRRight (ignored)\n"));
           break;
         case vfo_Click:
-          Serial.println("menu_show: vfo_Click");
+          Serial.printf(F("menu_show: vfo_Click\n"));
           if (menu->items[item_num]->action != NULL)
           {
             // if there's a handler, call it
@@ -455,14 +431,14 @@ void menu_show(struct Menu *menu, int unused)
             menu_show(menu->items[item_num]->menu, 0);
           }
           menu_draw(menu);    // redraw the menu header
-          Serial.println("menu_show: end of vfo_Click handling");
+          Serial.printf(F("menu_show: end of vfo_Click handling\n"));
           break;
         case vfo_HoldClick:
-          Serial.println("menu_show: vfo_HoldClick, exit menu");
+          Serial.printf(F("menu_show: vfo_HoldClick, exit menu\n"));
           event_flush();
           return;
         default:
-          Serial.print("menu_show: unrecognized event "); Serial.println(event);
+          Serial.printf(F("menu_show: unrecognized event %d\n"), event);
           break;
       }
 
@@ -568,21 +544,18 @@ void event_dump_queue(const char *msg)
   // Must protect from RE code fiddling with queue
   noInterrupts();
 
-  Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-  Serial.print("Queue: "); Serial.println(msg);
+  Serial.printf(F("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"));
+  Serial.printf(F("Queue: %s\n"), msg);
   for (int i = 0; i < QueueLength; ++i)
   {
     VFOEvent event = event_queue[i];
-    
-    Serial.print("  ");
-    Serial.print(event);
-    Serial.print(" -> ");
-    Serial.println(event2display(event));
+
+    Serial.printf(F("  %d -> %s\n"), event, event2display(event));
   }
-  Serial.print("Queue length="); Serial.println(event_pending());
-  Serial.print("queue_aft="); Serial.print(queue_aft);
-  Serial.print(", queue_fore="); Serial.println(queue_fore);
-  Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+  Serial.printf(F("Queue length=%d\n"), event_pending());
+  Serial.printf(F("queue_aft=%d\n"), queue_aft);
+  Serial.printf(F(", queue_fore=%d\n"), queue_fore);
+  Serial.printf(F("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"));
 
   interrupts();
 }
@@ -599,7 +572,6 @@ void event_dump_queue(const char *msg)
 //              (0 is rightmost digit, increasing to the left)
 //     row      the row to use, 0 is at top
 // The row and columns used to show frequency digits are defined elsewhere.
-// A final "Hz" is written.
 //----------------------------------------
 
 void print_freq(Frequency freq, int sel_col, int row)
@@ -608,7 +580,9 @@ void print_freq(Frequency freq, int sel_col, int row)
   int index = MAX_FREQ_CHARS - sel_col - 1;
   bool lead_zero = true;
 
-  ltobbuff(buf, MAX_FREQ_CHARS, freq);
+  Serial.printf(F("print_freq: freq=%ld, row=%d\n"), freq, row);
+  
+  ulong2buff(buf, MAX_FREQ_CHARS, freq);
 
   lcd.createChar(SELECT_CHAR, sel_digits[int(buf[index])]);
   lcd.setCursor(NUM_COLS - MAX_FREQ_CHARS - 2, row);
@@ -622,20 +596,89 @@ void print_freq(Frequency freq, int sel_col, int row)
     if (lead_zero)
     {
       if (index == i)
+      {
         lcd.write(byte(SPACE_CHAR));
+        Serial.printf(F("print_freq: wrote selected space\n"));
+      }
       else
+      {
         lcd.write(" ");
+        Serial.printf(F("print_freq: wrote space\n"));
+      }
     }
     else
     {
       if (index == i)
+      {
         lcd.write(byte(SELECT_CHAR));
+        Serial.printf(F("print_freq: wrote selected char\n"));
+      }
       else
+      {
         lcd.write(char_val + '0');
+        Serial.printf("print_freq: wrote char %d\n", char_val);
+      }
     }
   }
+}
 
-  lcd.print("Hz");
+//----------------------------------------
+// Display an unsigned long on the display with selected colum underlined.
+//     value       the number to display
+//     sel_col     the selection offset of digit to underline
+//                 (0 is rightmost digit, increasing to the left)
+//     num_digits  the number of digits to show on the display
+//     col, row    position to display left-most digit at
+// The LCD cursor position is assumed set before this function is called.
+// If the value is too long it will be truncated at the left.
+//----------------------------------------
+
+void display_sel_value(unsigned long value, int sel_col, int num_digits, int col, int row)
+{
+  char buf [num_digits];
+  int index = num_digits - sel_col - 1;
+  bool lead_zero = true;
+
+  Serial.printf(F("display_sel_value: value=%ld, num_digits=%d\n"), value, num_digits);
+  
+  ulong2buff(buf, num_digits, value);
+
+  lcd.createChar(SELECT_CHAR, sel_digits[int(buf[index])]);
+  lcd.setCursor(col, row);  // because we lose cursor position after lcd.createChar()!?
+  for (int i = 0; i < num_digits; ++i)
+  {
+    int char_val = buf[i];
+
+    if (char_val != 0)
+        lead_zero = false;
+
+    if (lead_zero)
+    {
+      if (index == i)
+      {
+        lcd.write(byte(SPACE_CHAR));
+        Serial.printf(F("display_sel_value: wrote selected space\n"));
+      }
+      else
+      {
+        lcd.write(" ");
+        Serial.printf(F("display_sel_value: wrote space\n"));
+      }
+    }
+    else
+    {
+      if (index == i)
+      {
+        lcd.write(byte(SELECT_CHAR));
+        Serial.printf(F("display_sel_value: wrote selected char\n"));
+      }
+      else
+      {
+        lcd.write(char_val + '0');
+        Serial.printf("display_sel_value: wrote char %d\n", char_val);
+      }
+    }
+  }
 }
 
 
@@ -873,22 +916,20 @@ void dump_eeprom(void)
   EEPROM.get(AddressBrightness, brightness);
   EEPROM.get(AddressContrast, contrast);
   EEPROM.get(AddressHoldClickTime, hold);
-  Serial.println("=================================================");
-  Serial.print("dump_eeprom: VfoFrequency="); Serial.println(ulong);
-  Serial.print("             AddressSelDigit="); Serial.println(offset);
-  Serial.print("             LcdBrightness="); Serial.println(brightness);
-  Serial.print("             LcdContrast="); Serial.println(contrast);
-  Serial.print("             ReHoldClickTime="); Serial.println(hold);
+  Serial.printf(F("=================================================\n"));
+  Serial.printf(F("dump_eeprom: VfoFrequency=%ld\n"), ulong);
+  Serial.printf(F("             AddressSelDigit=%d\n"), offset);
+  Serial.printf(F("             LcdBrightness=%d\n"), brightness);
+  Serial.printf(F("             LcdContrast=%d\n"), contrast);
+  Serial.printf(F("             ReHoldClickTime=%d\n"), hold);
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
     get_slot(i, ulong, offset);
-    Serial.print("Slot "); Serial.print(i); Serial.print(": ");
-    Serial.print(ulong); Serial.print(", ");
-    Serial.println(offset);
+    Serial.printf(F("Slot %d: freq=%ld, seldig=%d\n"), i, ulong, offset);
   }
 
-  Serial.println("=================================================");
+  Serial.printf(F("=================================================\n"));
 }
 #endif
 
@@ -930,8 +971,7 @@ void dds_update(Frequency frequency)
 {
   int32_t data = frequency * 4294967296.0 / 180.0e6;
 
-  Serial.print("dds_update: frequency="); Serial.println(frequency);
-  Serial.print("                 data="); Serial.println(data);
+  Serial.printf(F("dds_update: frequency=%ld, data=%ld\n"), frequency, data);
   
   for (int b = 0; b < 4; ++b, data >>= 8)
   {
@@ -999,7 +1039,7 @@ void setup(void)
 
 #ifdef VFO_RESET
   zero_eeprom();
-  Serial.println("All EEPROM data reset");
+  Serial.printf(F("All EEPROM data reset\n"));
 #endif
 
   // initialize the display
@@ -1043,10 +1083,9 @@ void setup(void)
     lcd.print("in Settings menu");
 
     // and Serial console
-    Serial.print("Reset brightness to "); Serial.print(LcdBrightness);
-    Serial.print(", contrast to "); Serial.print(LcdContrast);
-    Serial.print(" and hold time to "); Serial.println(ReHoldClickTime);
-    Serial.println("Select or rotate the rotary encoder to continue");
+    Serial.printf(F("Reset brightness to %d, contrast to %d and hold time to %d\n"),
+                  LcdBrightness, LcdContrast, ReHoldClickTime);
+    Serial.printf(F("Select or rotate the rotary encoder to continue\n"));
 
     // wait here until there is some input action
     event_flush();
@@ -1080,7 +1119,9 @@ void show_main_screen(void)
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Freq:");
-  print_freq(VfoFrequency, VfoSelectDigit, 0);
+  display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
+//  print_freq(VfoFrequency, VfoSelectDigit, 0);
+  lcd.print("Hz");
 }
 
 //----------------------------------------
@@ -1104,6 +1145,7 @@ void show_slot_frequency(int slot_num)
   lcd.write(slot_num + '0');
   lcd.print(":");
   print_freq(freq, -1, 1);
+  lcd.print("Hz");
 }
 
 //----------------------------------------
@@ -1419,15 +1461,14 @@ void contrast_action(struct Menu *menu, int item_num)
 
 void draw_row1_time(int msec)
 {
-  Serial.print("draw_row1_time: msec="); Serial.print(msec);
-  Serial.print(", ReHoldClickTime="); Serial.println(ReHoldClickTime);
+  Serial.printf(F("draw_row1_time: msec=%d, ReHoldClickTime=%d\n"), msec, ReHoldClickTime);
   
   lcd.setCursor(0, 1);
   lcd.print(BlankRow);
   
   if (msec == ReHoldClickTime)
   {
-    Serial.println("draw_row1_time: drawing *");
+    Serial.printf(F("draw_row1_time: drawing IN_USE_CHAR\n"));
     lcd.setCursor(0, 1);
     lcd.write(IN_USE_CHAR);
   }
@@ -1449,7 +1490,7 @@ void draw_row1_time(int msec)
 
 void holdclick_action(struct Menu *menu, int item_num)
 {
-  Serial.println("holdclick_action: entered");
+  Serial.printf(F("holdclick_action: entered\n"));
 
   int holdtime = ReHoldClickTime;
   
@@ -1480,15 +1521,13 @@ void holdclick_action(struct Menu *menu, int item_num)
           holdtime -= HOLD_STEP;
           if (holdtime < MinHoldClickTime)
             holdtime = MinHoldClickTime;
-          Serial.print("holdclick_action: vfo_RLeft, after holdtime=");
-          Serial.println(holdtime);
+          Serial.printf(F("holdclick_action: vfo_RLeft, after holdtime=%d\n"), holdtime);
           break;
         case vfo_RRight:
           holdtime += HOLD_STEP;
           if (holdtime > MaxHoldClickTime)
             holdtime = MaxHoldClickTime;
-          Serial.print("holdclick_action: vfo_RRight, after holdtime=");
-          Serial.println(holdtime);
+          Serial.printf(F("holdclick_action: vfo_RRight, after holdtime=%d\n"), holdtime);
           break;
         case vfo_Click:
           ReHoldClickTime = holdtime;
@@ -1551,7 +1590,7 @@ void loop(void)
     switch (event)
     {
       case vfo_RLeft:
-        Serial.println("loop: vfo_RLeft");
+        Serial.printf(F("loop: vfo_RLeft\n"));
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MIN_FREQ)
           VfoFrequency = MIN_FREQ;
@@ -1559,7 +1598,7 @@ void loop(void)
           VfoFrequency = MAX_FREQ;
        break;
       case vfo_RRight:
-        Serial.println("loop: vfo_RRight");
+        Serial.printf(F("loop: vfo_RRight\n"));
         VfoFrequency += offset2bump[VfoSelectDigit];
         if (VfoFrequency < MIN_FREQ)
           VfoFrequency = MIN_FREQ;
@@ -1567,35 +1606,36 @@ void loop(void)
           VfoFrequency = MAX_FREQ;
         break;
       case vfo_DnRLeft:
-        Serial.println("loop: vfo_DnRLeft");
+        Serial.printf(F("loop: vfo_DnRLeft\n"));
         VfoSelectDigit += 1;        
         if (VfoSelectDigit >= MAX_FREQ_CHARS)
           VfoSelectDigit = MAX_FREQ_CHARS - 1;
         break;
       case vfo_DnRRight:
-        Serial.println("loop: vfo_DnRRight");
+        Serial.printf(F("loop: vfo_DnRRight\n"));
         VfoSelectDigit -= 1;
         if (VfoSelectDigit < 0)
           VfoSelectDigit = 0;
         break;
       case vfo_Click:
-        Serial.println("loop: vfo_Click event ignored");
+        Serial.printf(F("loop: vfo_Click event ignored\n"));
         break;
       case vfo_HoldClick:
-        Serial.println("loop: Got vfo_HoldClick: calling menu_show()");
+        Serial.printf(F("loop: Got vfo_HoldClick: calling menu_show()\n"));
         menu_show(&menu_main, 0);    // redisplay the original menu
         show_main_screen();
         save_to_eeprom();   // save any changes made
         break;
       default:
-        Serial.print("loop: Unrecognized event: "); Serial.println(event);
+        Serial.printf(F("loop: Unrecognized event: %d\n"), event);
         break;
     }
 
     // display frequency if changed, update DDS-60
     if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
     {
-      print_freq(VfoFrequency, VfoSelectDigit, 0);
+      display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
+//      print_freq(VfoFrequency, VfoSelectDigit, 0);
       old_freq = VfoFrequency;
       old_position = VfoSelectDigit;
 
