@@ -1239,6 +1239,39 @@ void deleteslot_action(struct Menu *menu, int item_num)
 }
 
 //----------------------------------------
+// Reset everything in the VFO - Dangerous!
+//   menu      address of 'calling' menu
+//   item_num  index of MenuItem we were actioned from
+//----------------------------------------
+
+void reset_action(struct Menu *menu, int item_num)
+{
+  Frequency zero_freq = 0L;
+  SelOffset zero_offset = 0;
+  
+  // zero the frequency+selected values
+  VfoFrequency = MIN_FREQ;
+  VfoSelectDigit = 0;
+  LcdBrightness = DefaultLcdBrightness;
+  LcdContrast = DefaultLcdContrast;
+  ReHoldClickTime = DefaultHoldClickTime;
+  
+  save_to_eeprom();
+
+  // zero the save slots
+  for (int i = 0; i < NumSaveSlots; ++i)
+  {
+    put_slot(i, zero_freq, zero_offset);
+  }
+
+  display_flash();
+}
+
+void reset_no_action(struct Menu *menu, int item_num)
+{
+}
+
+//----------------------------------------
 // Draw a bar of a given length on row 1 of LCD.
 //   length  length of the bar [1, 16]
 //----------------------------------------
@@ -1469,6 +1502,15 @@ void holdclick_action(struct Menu *menu, int item_num)
 
 
 //----------------------------------------
+// Reset menu
+//----------------------------------------
+
+struct MenuItem mi_reset_no = {"No", NULL, &reset_no_action};
+struct MenuItem mi_reset_yes = {"Yes", NULL, &reset_action};
+struct MenuItem *mia_reset[] = {&mi_reset_no, &mi_reset_yes};
+struct Menu reset_menu = {"Reset all", ARRAY_LEN(mia_reset), mia_reset};
+
+//----------------------------------------
 // Settings menu
 //----------------------------------------
 
@@ -1486,7 +1528,8 @@ struct MenuItem mi_save = {"Save slot", NULL, &saveslot_action};
 struct MenuItem mi_restore = {"Restore slot", NULL, &restoreslot_action};
 struct MenuItem mi_del = {"Delete slot", NULL, &deleteslot_action};
 struct MenuItem mi_settings = {"Settings", &settings_menu, NULL};
-struct MenuItem *mia_main[] = {&mi_save, &mi_restore, &mi_del, &mi_settings};
+struct MenuItem mi_reset = {"Reset all", &reset_menu, NULL};
+struct MenuItem *mia_main[] = {&mi_save, &mi_restore, &mi_del, &mi_settings, &mi_reset};
 struct Menu menu_main = {"Menu", ARRAY_LEN(mia_main), mia_main};
 
 
