@@ -15,13 +15,6 @@
 #include <EEPROM.h>
 
 
-// macro to get number of elements in an array
-#define ARRAY_LEN(a)    (sizeof(a)/sizeof(a[0]))
-
-//#define VFO_RESET   // define if resetting all EEPROM data
-#define VFO_DEBUG   // define if debugging
-
-
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "0.9";
@@ -31,6 +24,9 @@ const char *Callsign16 = "vk4fawr         ";
 // display constants - below is for ubiquitous small HD44780 16x2 display
 #define NUM_ROWS        2
 #define NUM_COLS        16
+
+// macro to get number of elements in an array
+#define ARRAY_LEN(a)    (sizeof(a)/sizeof(a[0]))
 
 // define one row of blanks
 const char *BlankRow = "                ";
@@ -224,7 +220,7 @@ void banner(void)
   lcd.print(Version);
   lcd.setCursor(0, 1);
   lcd.print(Callsign);
-  delay(1000);    // wait a bit
+  delay(900);    // wait a bit
 
   // do a fade out
   for (int i = LcdBrightness; i; --i)
@@ -293,7 +289,6 @@ struct Menu
   struct MenuItem **items;    // array of pointers to MenuItem data
 };
 
-#ifdef VFO_DEBUG
 // dump a MenuItem to the console
 // only called from dump_menu()
 void dump_menuitem(struct MenuItem *menuitem)
@@ -319,7 +314,6 @@ void dump_menu(const char *msg, struct Menu *menu)
     
   Serial.printf(F("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"));
 }
-#endif
 
 //----------------------------------------
 // Draw the menu on the screen
@@ -844,7 +838,6 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 // print all EEPROM saved data to console
 //----------------------------------------
 
-#ifdef VFO_DEBUG
 void dump_eeprom(void)
 {
   Frequency ulong;
@@ -873,7 +866,6 @@ void dump_eeprom(void)
 
   Serial.printf(F("=================================================\n"));
 }
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Code to handle the DDS-60
@@ -948,29 +940,6 @@ void dds_setup(void)
 // Main VFO code
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef VFO_RESET
-void zero_eeprom(void)
-{
-  Frequency zero_freq = 0L;
-  SelOffset zero_offset = 0;
-  
-  // zero the frequency+selected values
-  VfoFrequency = MIN_FREQ;
-  VfoSelectDigit = 0;
-  LcdBrightness = DefaultLcdBrightness;
-  LcdContrast = DefaultLcdContrast;
-  ReHoldClickTime = DefaultHoldClickTime;
-  
-  save_to_eeprom();
-
-  // zero the save slots
-  for (int i = 0; i < NumSaveSlots; ++i)
-  {
-    put_slot(i, zero_freq, zero_offset);
-  }
-}
-#endif
-
 //----------------------------------------
 // The standard Arduino setup() function.
 //----------------------------------------
@@ -1011,21 +980,29 @@ void setup(void)
 
     Serial.printf(F("Resetting brightness to %d, contrast to %d and hold time to %d\n"),
                   LcdBrightness, LcdContrast, ReHoldClickTime);
+
+    // show user we were reset
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("DigitalVFO reset");
+    lcd.setCursor(0, 1);
+    lcd.print(" nothing saved");
+    delay(2000);
+    lcd.clear();
+    delay(1000);
   }
   
-  // we sometimes see random events on powerup, flush them here
-  event_flush();
-
   // show program name and version number
   banner();
 
   // we sometimes see random events on powerup, flush them here
   event_flush();
   
-#ifdef VFO_DEBUG
   // dump EEPROM values
   dump_eeprom();
-#endif
+
+  // we sometimes see random events on powerup, flush them here
+  event_flush();
 
   // get going
   show_main_screen();
@@ -1413,14 +1390,11 @@ void contrast_action(struct Menu *menu, int item_num)
 
 void draw_row1_time(int msec)
 {
-  Serial.printf(F("draw_row1_time: msec=%d, ReHoldClickTime=%d\n"), msec, ReHoldClickTime);
-  
   lcd.setCursor(0, 1);
   lcd.print(BlankRow);
   
   if (msec == ReHoldClickTime)
   {
-    Serial.printf(F("draw_row1_time: drawing IN_USE_CHAR\n"));
     lcd.setCursor(0, 1);
     lcd.write(IN_USE_CHAR);
   }
