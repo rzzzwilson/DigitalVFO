@@ -68,7 +68,7 @@ const byte DDS_DATA = 16;     // connected to AD9851 D7 (serial data) pin
 // address in display CGRAM for definable characters
 #define SELECT_CHAR     0     // shows 'underlined' decimal digits (dynamic, 0 to 9)
 #define SPACE_CHAR      1     // shows an 'underlined' space character
-#define ALLSET_CHAR     0xff  // shows an 'all bits set' character, used for 'bar' display
+#define ALLSET_CHAR     0xff  // the 'all bits set' char in display RAM, used for 'bar' display
 
 // define the numeric digits and space with selection underline
 byte sel0[8] = {0xe,0x11,0x13,0x15,0x19,0x11,0xe,0x1f};
@@ -113,7 +113,7 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 #define vfo_Click     5
 #define vfo_HoldClick 6
 
-// the "in use" display character
+// the "in use" display character, ">"
 #define IN_USE_CHAR   0x7e
 
 // default LCD contrast & brightness
@@ -145,34 +145,36 @@ int LcdBrightness = 255;
 // Abort the program.
 // Tries to tell the world what went wrong, then just loops.
 //     msg  address of error string
-// Only first 32 chars of message is displayed.
+// Only first NUM_ROWS*NUM_COLS chars of message is displayed on LCD.
 //----------------------------------------
 
 void abort(const char *msg)
 {
-  char buf[NUM_COLS*2+1];
+  char buf[NUM_COLS*NUM_ROWS+1];
   char *ptr = buf;
   
   // print error on console (maybe)
   Serial.printf(F("message=%s\nTeensy is paused!\n"), msg);
 
-  // truncate/pad message to 32 chars
-  for (int i = 0; i < NUM_COLS*2; ++i)
+  // truncate/pad message to NUM_ROWS * NUM_COLS chars
+  for (int i = 0; i < NUM_COLS*NUM_ROWS; ++i)
     *ptr++ = ' ';
   *ptr = '\0';
   
-  strncpy(buf, msg, NUM_COLS*2);
-  if (strlen(msg) < NUM_COLS*2)
-    strncpy(buf + strlen(msg), "                                ", NUM_COLS*2 - strlen(msg));
+  strncpy(buf, msg, NUM_COLS*NUM_ROWS);
+  if (strlen(msg) < NUM_COLS*NUM_ROWS)
+    strncpy(buf + strlen(msg), "                                ",
+            NUM_COLS*NUM_ROWS - strlen(msg));
 
   // show what we can on the display, forever
   while (1)
   {
     lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(buf);
-    lcd.setCursor(0, 1);
-    lcd.print(buf + NUM_COLS);
+    for (int i = 0; i < NUM_ROWS; ++i)
+    {
+      lcd.setCursor(0, i);
+      lcd.print(buf + i*NUM_COLS);
+    }
     delay(2000);
 
     lcd.clear();
@@ -191,7 +193,7 @@ void abort(const char *msg)
 // Convert an event number to a display string
 //----------------------------------------
 
-const char * event2display(VFOEvent event)
+const char *event2display(VFOEvent event)
 {
   switch (event)
   {
@@ -202,15 +204,15 @@ const char * event2display(VFOEvent event)
     case vfo_DnRRight:  return "vfo_DnRRight";
     case vfo_Click:     return "vfo_Click";
     case vfo_HoldClick: return "vfo_HoldClick";
-    default:            return "UNKNOWN!";
   }
+  
+  return "UNKNOWN!";
 }
 
 //----------------------------------------
 // display a simple banner on the LCD
 //----------------------------------------
 
-#ifndef VFO_DEBUG
 void banner(void)
 {
   Serial.printf(F("%s %s (%s)\n"), ProgramName, Version, Callsign);
@@ -222,23 +224,18 @@ void banner(void)
   lcd.print(Version);
   lcd.setCursor(0, 1);
   lcd.print(Callsign);
-  delay(2000);    // wait a bit
+  delay(1000);    // wait a bit
 
-  for (int i = 0; i <= NUM_COLS; ++i)
+  // do a fade out
+  for (int i = LcdBrightness; i; --i)
   {
-    lcd.clear();
-    lcd.setCursor(i, 0);
-    lcd.print(ProgramName);
-    lcd.print(" ");
-    lcd.print(Version);
-    lcd.setCursor(0, 1);
-    lcd.print(Callsign16 + i);
-    delay(200);
+    analogWrite(mc_Brightness, i);
+    delay(10);
   }
-
-  delay(500);
+  lcd.clear();
+  delay(300);
+  analogWrite(mc_Brightness, LcdBrightness);
 }
-#endif
 
 //----------------------------------------
 // Function to convert an unsigned long into an array of byte digit values.
@@ -256,8 +253,6 @@ void banner(void)
 
 void ulong2buff(char *buf, int bufsize, unsigned long value)
 {
-  Serial.printf(F("ulong2buff: bufsize=%d, value=%ld\n"), bufsize, value);
-  
   char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
 
   for (int i = 0; i < bufsize; ++i)
@@ -266,8 +261,6 @@ void ulong2buff(char *buf, int bufsize, unsigned long value)
 
     value = value / 10;
     *ptr-- = char(rem);
-
-    Serial.printf(F("long2buff: stored byte %d, i=%d\n"), rem, i);
   }
 }
 
@@ -330,7 +323,7 @@ void dump_menu(const char *msg, struct Menu *menu)
 
 //----------------------------------------
 // Draw the menu on the screen
-//     menu      pointer to a Menu structure
+//     menu  pointer to a Menu structure
 //----------------------------------------
 
 void menu_draw(struct Menu *menu)
@@ -342,7 +335,7 @@ void menu_draw(struct Menu *menu)
 }
 
 //----------------------------------------
-// Draw a standard or custom menuitem on the screen.
+// Draw a standard menuitem on the screen.
 //     menu      pointer to a Menu structure
 //     item_num  the item number to show
 //----------------------------------------
@@ -378,10 +371,6 @@ void menuitem_draw(struct Menu *menu, int item_num)
 void menu_show(struct Menu *menu, int unused)
 {
   int item_num = 0;     // index of the menuitem to show
-
-#ifdef VFO_DEBUG
-  dump_menu("menu_show, menu:", menu);
-#endif
 
   // draw the menu page
   menu_draw(menu);
@@ -453,7 +442,7 @@ void menu_show(struct Menu *menu, int unused)
 // flashes the menu page in a possibly eye-catching way
 //----------------------------------------
 
-void menu_flash(void)
+void display_flash(void)
 {
   lcd.noDisplay();
   delay(100);
@@ -535,8 +524,13 @@ int event_pending(void)
 
 void event_flush(void)
 {
+  // Must protect from RE code fiddling with queue
+  noInterrupts();
+
   queue_fore = 0;
   queue_aft = 0;
+
+  interrupts();
 }
 
 void event_dump_queue(const char *msg)
@@ -566,70 +560,12 @@ void event_dump_queue(const char *msg)
 ////////////////////////////////////////////////////////////////////////////////
 
 //----------------------------------------
-// Print the frequency on the display with selected colum underlined.
-//     freq     the frequency to display
-//     sel_col  the selection offset of digit to underline
-//              (0 is rightmost digit, increasing to the left)
-//     row      the row to use, 0 is at top
-// The row and columns used to show frequency digits are defined elsewhere.
-//----------------------------------------
-
-void print_freq(Frequency freq, int sel_col, int row)
-{
-  char buf [MAX_FREQ_CHARS];
-  int index = MAX_FREQ_CHARS - sel_col - 1;
-  bool lead_zero = true;
-
-  Serial.printf(F("print_freq: freq=%ld, row=%d\n"), freq, row);
-  
-  ulong2buff(buf, MAX_FREQ_CHARS, freq);
-
-  lcd.createChar(SELECT_CHAR, sel_digits[int(buf[index])]);
-  lcd.setCursor(NUM_COLS - MAX_FREQ_CHARS - 2, row);
-  for (int i = 0; i < MAX_FREQ_CHARS; ++i)
-  {
-    int char_val = buf[i];
-
-    if (char_val != 0)
-        lead_zero = false;
-
-    if (lead_zero)
-    {
-      if (index == i)
-      {
-        lcd.write(byte(SPACE_CHAR));
-        Serial.printf(F("print_freq: wrote selected space\n"));
-      }
-      else
-      {
-        lcd.write(" ");
-        Serial.printf(F("print_freq: wrote space\n"));
-      }
-    }
-    else
-    {
-      if (index == i)
-      {
-        lcd.write(byte(SELECT_CHAR));
-        Serial.printf(F("print_freq: wrote selected char\n"));
-      }
-      else
-      {
-        lcd.write(char_val + '0');
-        Serial.printf("print_freq: wrote char %d\n", char_val);
-      }
-    }
-  }
-}
-
-//----------------------------------------
-// Display an unsigned long on the display with selected colum underlined.
+// Display an unsigned long on the display with selected column underlined.
 //     value       the number to display
 //     sel_col     the selection offset of digit to underline
 //                 (0 is rightmost digit, increasing to the left)
 //     num_digits  the number of digits to show on the display
 //     col, row    position to display left-most digit at
-// The LCD cursor position is assumed set before this function is called.
 // If the value is too long it will be truncated at the left.
 //----------------------------------------
 
@@ -639,8 +575,6 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
   int index = num_digits - sel_col - 1;
   bool lead_zero = true;
 
-  Serial.printf(F("display_sel_value: value=%ld, num_digits=%d\n"), value, num_digits);
-  
   ulong2buff(buf, num_digits, value);
 
   lcd.createChar(SELECT_CHAR, sel_digits[int(buf[index])]);
@@ -657,12 +591,10 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
       if (index == i)
       {
         lcd.write(byte(SPACE_CHAR));
-        Serial.printf(F("display_sel_value: wrote selected space\n"));
       }
       else
       {
         lcd.write(" ");
-        Serial.printf(F("display_sel_value: wrote space\n"));
       }
     }
     else
@@ -670,12 +602,10 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
       if (index == i)
       {
         lcd.write(byte(SELECT_CHAR));
-        Serial.printf(F("display_sel_value: wrote selected char\n"));
       }
       else
       {
         lcd.write(char_val + '0');
-        Serial.printf("display_sel_value: wrote char %d\n", char_val);
       }
     }
   }
@@ -710,7 +640,12 @@ volatile byte bFlag = 0;
 // Setup the encoder stuff, pins, etc.
 //----------------------------------------
 
-void re_setup(int position)
+//----------------------------------------
+// Initialize the rotary encoder stuff
+// Return 'true' if button was pressed down
+//----------------------------------------
+
+bool re_setup(void)
 {
   // set RE data pins as pullup inputs
   pinMode(re_pinA, INPUT_PULLUP);
@@ -721,11 +656,18 @@ void re_setup(int position)
   attachInterrupt(digitalPinToInterrupt(re_pinA), pinA_isr, RISING);
   attachInterrupt(digitalPinToInterrupt(re_pinB), pinB_isr, RISING);
   attachInterrupt(digitalPinToInterrupt(re_pinPush), pinPush_isr, CHANGE);
+
+  // look at RE button, if DOWN this function returns 'true'
+  return ! (PIND & 0x10);
+  
+//  if (re_down)
+//  return false;
 }
 
 void pinPush_isr(void)
 {
   re_down = ! (PIND & 0x10);
+  
   if (re_down)
   {
     // button pushed down
@@ -1006,10 +948,6 @@ void dds_setup(void)
 // Main VFO code
 ////////////////////////////////////////////////////////////////////////////////
 
-//----------------------------------------
-// The standard Arduino setup() function.
-//----------------------------------------
-
 #ifdef VFO_RESET
 void zero_eeprom(void)
 {
@@ -1033,21 +971,21 @@ void zero_eeprom(void)
 }
 #endif
 
+//----------------------------------------
+// The standard Arduino setup() function.
+//----------------------------------------
+
 void setup(void)
 {
+  // initialize the serial console
   Serial.begin(115200);
 
-#ifdef VFO_RESET
-  zero_eeprom();
-  Serial.printf(F("All EEPROM data reset\n"));
-#endif
-
   // initialize the display
-  lcd.begin(NUM_COLS, NUM_COLS);      // define display size
+  lcd.begin(NUM_COLS, NUM_ROWS);      // define display size
   lcd.clear();
   lcd.noCursor();
-  lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
 
+  // set brightness/contrast pin state
   pinMode(mc_Brightness, OUTPUT);
   pinMode(mc_Contrast, OUTPUT);
 
@@ -1056,45 +994,30 @@ void setup(void)
   analogWrite(mc_Brightness, LcdBrightness);
   analogWrite(mc_Contrast, LcdContrast);
 
+  // create underlined space for frequency display
+  lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
+
   // set up the DDS device
   dds_setup();
-  
-  // set up the rotary encoder
-  re_setup(VfoSelectDigit);
 
-  // show program name and version number
-#ifndef VFO_DEBUG
-  banner();
-
-  // we might have got a 'reset' HoldClick during banner presentation
-  if (event_pop() == vfo_HoldClick)
+  // set up the rotary encoder, reset a few things if RE button down
+  if (re_setup())
   {
-    // if holdClick during banner, reset all "Settings" values
     LcdBrightness = DefaultLcdBrightness;
     analogWrite(mc_Brightness, LcdBrightness);
     LcdContrast = DefaultLcdContrast;
     analogWrite(mc_Contrast, LcdContrast);
-    ReHoldClickTime = DefaultHoldClickTime;
+    ReHoldClickTime = DefaultHoldClickTime;    
 
-    // tell what happened on LCD
-    lcd.clear();
-    lcd.print("Reset all values");
-    lcd.setCursor(0, 1);
-    lcd.print("in Settings menu");
-
-    // and Serial console
-    Serial.printf(F("Reset brightness to %d, contrast to %d and hold time to %d\n"),
+    Serial.printf(F("Resetting brightness to %d, contrast to %d and hold time to %d\n"),
                   LcdBrightness, LcdContrast, ReHoldClickTime);
-    Serial.printf(F("Select or rotate the rotary encoder to continue\n"));
-
-    // wait here until there is some input action
-    event_flush();
-    while (! event_pending())
-      delay(100);
-    event_flush();
-    delay(500);
   }
-#endif
+  
+  // we sometimes see random events on powerup, flush them here
+  event_flush();
+
+  // show program name and version number
+  banner();
 
   // we sometimes see random events on powerup, flush them here
   event_flush();
@@ -1106,9 +1029,6 @@ void setup(void)
 
   // get going
   show_main_screen();
-
-  // we sometimes see random events on powerup, flush them here
-  event_flush();
 }
 
 //----------------------------------------
@@ -1120,7 +1040,6 @@ void show_main_screen(void)
   lcd.setCursor(0, 0);
   lcd.print("Freq:");
   display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
-//  print_freq(VfoFrequency, VfoSelectDigit, 0);
   lcd.print("Hz");
 }
 
@@ -1144,7 +1063,7 @@ void show_slot_frequency(int slot_num)
   lcd.setCursor(4, 1);
   lcd.write(slot_num + '0');
   lcd.print(":");
-  print_freq(freq, -1, 1);
+  display_sel_value(freq, -1, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 1);
   lcd.print("Hz");
 }
 
@@ -1189,7 +1108,7 @@ void saveslot_action(struct Menu *menu, int item_num)
         case vfo_Click:
           put_slot(slot_num, VfoFrequency, VfoSelectDigit);
           show_slot_frequency(slot_num);
-          menu_flash();
+          display_flash();
           break;
         case vfo_HoldClick:
           event_flush();
@@ -1245,7 +1164,7 @@ void restoreslot_action(struct Menu *menu, int item_num)
           break;
         case vfo_Click:
           get_slot(slot_num, VfoFrequency, VfoSelectDigit);
-          menu_flash();
+          display_flash();
           break;
         case vfo_HoldClick:
           event_flush();
@@ -1303,7 +1222,7 @@ void deleteslot_action(struct Menu *menu, int item_num)
           break;
         case vfo_Click:
           put_slot(slot_num, zero_freq, zero_offset);
-          menu_flash();
+          display_flash();
           break;
         case vfo_HoldClick:
           event_flush();
@@ -1374,7 +1293,7 @@ void brightness_action(struct Menu *menu, int item_num)
           break;
         case vfo_Click:
           save_to_eeprom();
-          menu_flash();
+          display_flash();
           break;
         case vfo_HoldClick:
           event_flush();
@@ -1435,7 +1354,7 @@ void contrast_action(struct Menu *menu, int item_num)
           break;
         case vfo_Click:
           save_to_eeprom();
-          menu_flash();
+          display_flash();
           break;
         case vfo_HoldClick:
           event_flush();
@@ -1532,7 +1451,7 @@ void holdclick_action(struct Menu *menu, int item_num)
         case vfo_Click:
           ReHoldClickTime = holdtime;
           save_to_eeprom();
-          menu_flash();
+          display_flash();
           break;
         case vfo_HoldClick:
           event_flush();
@@ -1635,7 +1554,6 @@ void loop(void)
     if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
     {
       display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
-//      print_freq(VfoFrequency, VfoSelectDigit, 0);
       old_freq = VfoFrequency;
       old_position = VfoSelectDigit;
 
