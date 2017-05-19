@@ -116,10 +116,16 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 const unsigned int DefaultLcdContrast = 70;
 const unsigned int DefaultLcdBrightness = 150;
 
+// VFO modes - online or standby
+#define vfo_Standby   0
+#define vfo_Online    1
 
 //##############################################################################
 // The VFO state variables and typedefs
 //##############################################################################
+
+typedef unsigned int Mode;
+Mode VfoMode;               // VFO mode
 
 typedef unsigned long Frequency;
 Frequency VfoFrequency;     // VFO frequency (Hz)
@@ -268,6 +274,21 @@ void ulong2buff(char *buf, int bufsize, unsigned long value)
     value = value / 10;
     *ptr-- = char(rem);
   }
+}
+
+//----------------------------------------
+// Convert a numeric mode to a display string.
+//----------------------------------------
+
+const char *mode2display(Mode mode)
+{
+  switch (mode)
+  {
+    case vfo_Standby: return "standby";
+    case vfo_Online:  return "ON";
+  }
+
+  return "UNKNOWN";
 }
 
 
@@ -972,7 +993,29 @@ void dds_update(Frequency frequency)
 }
 
 //----------------------------------------
-// initialize the DDS hardware
+// Force the DDS into standby mode.
+//----------------------------------------
+
+void dds_standby(void)
+{
+  Serial.printf(F("DDS into standby mode.\n"));
+
+  dds_update(0L);
+}
+
+//----------------------------------------
+// Force the DDS into online mode.
+//----------------------------------------
+
+void dds_online(void)
+{
+  Serial.printf(F("DDS into online mode.\n"));
+  dds_update(VfoFrequency);
+}
+
+//----------------------------------------
+// Initialize the DDS hardware.
+// The VFO 'wakes up' in standby mode.
 //----------------------------------------
 
 void dds_setup(void)
@@ -988,6 +1031,10 @@ void dds_setup(void)
   // set serial load enable (Datasheet page 15 Fig. 17) 
   dds_pulse_high(DDS_W_CLK);
   dds_pulse_high(DDS_FQ_UD);
+
+  // wait a bit, then go into standby
+  delay(100);
+  dds_standby();
 }
 
 
@@ -1003,6 +1050,9 @@ void setup(void)
 {
   // initialize the serial console
   Serial.begin(115200);
+
+  // VFO wakes up in standby mode
+  VfoMode = vfo_Standby;
 
   // initialize the display
   lcd.begin(NUM_COLS, NUM_ROWS);      // define display size
@@ -1072,6 +1122,11 @@ void show_main_screen(void)
   lcd.print("Vfo:");
   display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
   lcd.print("Hz");
+
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  lcd.setCursor(0, 1);
+  lcd.write(mode2display(VfoMode));
 }
 
 //----------------------------------------
@@ -1640,6 +1695,30 @@ void doubleclick_action(struct Menu *menu, int item_num)
   }
 }
 
+//----------------------------------------
+// Toggle the VFO mode: vfo_Online or vfo_Standby.
+//----------------------------------------
+void vfo_toggle_mode(void)
+{
+  if (VfoMode == vfo_Online)
+  {
+    // DDS goes into standby, change mode
+    dds_standby();
+    VfoMode = vfo_Standby;
+  }
+  else
+  {
+    // DDS goes online, change mode
+    dds_online();
+    VfoMode = vfo_Online;
+  }
+
+  // update display
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  lcd.setCursor(0, 1);
+  lcd.write(mode2display(VfoMode));
+}
 
 //----------------------------------------
 // Reset menu
@@ -1731,7 +1810,8 @@ void loop(void)
         save_to_eeprom();   // save any changes made
         break;
       case vfo_DClick:
-        Serial.printf(F("loop: Got vfo_DClick: ignored\n"));
+        Serial.printf(F("loop: Got vfo_DClick\n"));
+        vfo_toggle_mode();
         break;
       default:
         Serial.printf(F("loop: Unrecognized event: %d\n"), event);
