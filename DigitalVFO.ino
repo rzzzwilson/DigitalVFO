@@ -107,18 +107,19 @@ LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 #define vfo_DnRRight  4
 #define vfo_Click     5
 #define vfo_HoldClick 6
+#define vfo_DClick    7
 
 // the "in use" display character, ">"
 #define IN_USE_CHAR   0x7e
 
 // default LCD contrast & brightness
-const int DefaultLcdContrast = 70;
-const int DefaultLcdBrightness = 150;
+const unsigned int DefaultLcdContrast = 70;
+const unsigned int DefaultLcdBrightness = 150;
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // The VFO state variables and typedefs
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 typedef unsigned long Frequency;
 Frequency VfoFrequency;     // VFO frequency (Hz)
@@ -132,9 +133,9 @@ int LcdContrast;
 int LcdBrightness = 255;
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // Utility routines
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 //----------------------------------------
 // Abort the program.
@@ -185,7 +186,7 @@ void abort(const char *msg)
 }
 
 //----------------------------------------
-// Convert an event number to a display string
+// Convert an event number to a display string.   Used only for debug.
 //----------------------------------------
 
 const char *event2display(VFOEvent event)
@@ -199,6 +200,7 @@ const char *event2display(VFOEvent event)
     case vfo_DnRRight:  return "vfo_DnRRight";
     case vfo_Click:     return "vfo_Click";
     case vfo_HoldClick: return "vfo_HoldClick";
+    case vfo_DClick:    return "vfo_DClick";
   }
   
   return "UNKNOWN!";
@@ -269,9 +271,9 @@ void ulong2buff(char *buf, int bufsize, unsigned long value)
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // Code to handle the DigitalVFO menus.
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 // handler for selection of an item (vfo_Click event)
 typedef void (*ItemAction)(struct Menu *, int);
@@ -456,10 +458,10 @@ void display_flash(void)
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // The system event queue.
 // Implemented as a circular buffer.
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 #define QueueLength 10
 
@@ -557,9 +559,9 @@ void event_dump_queue(const char *msg)
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // Utility routines for the display.
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 //----------------------------------------
 // Display an unsigned long on the display with selected column underlined.
@@ -614,10 +616,10 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // Interrupt driven rotary encoder interface.
 // from code by Simon Merrett, based on insight from Oleg Mazurov, Nick Gammon, rt, Steve Spence
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 // time when click becomes a "hold click" (milliseconds)
 // the delay is configurable in the UI
@@ -625,12 +627,20 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
 #define MaxHoldClickTime        1000
 #define DefaultHoldClickTime    500
 
-int ReHoldClickTime = DefaultHoldClickTime;
+// time when click becomes a "double click" (milliseconds)
+// the delay is configurable in the UI
+#define MinDClickTime           100
+#define MaxDClickTime           1000
+#define DefaultDClickTime       300
+
+unsigned int ReHoldClickTime = DefaultHoldClickTime;
+unsigned int ReDClickTime = DefaultDClickTime;
 
 // internal variables
 bool re_rotation = false;       // true if rotation occurred while knob down
 bool re_down = false;           // true while knob is down
-Frequency re_down_time = 0; // milliseconds when knob is pressed down
+unsigned long re_down_time = 0; // milliseconds when knob is pressed down
+unsigned long last_click = 0;   // time when last single click was found
 
 // expecting rising edge on pinA - at detent
 volatile byte aFlag = 0;
@@ -639,12 +649,8 @@ volatile byte aFlag = 0;
 volatile byte bFlag = 0;
 
 //----------------------------------------
-// Setup the encoder stuff, pins, etc.
-//----------------------------------------
-
-//----------------------------------------
-// Initialize the rotary encoder stuff
-// Return 'true' if button was pressed down
+// Initialize the rotary encoder stuff.
+// Return 'true' if button was pressed down during setup.
 //----------------------------------------
 
 bool re_setup(void)
@@ -663,6 +669,10 @@ bool re_setup(void)
   return ! (PIND & 0x10);
 }
 
+//----------------------------------------
+// Handler for pusbutton interrupts (UP or DOWN).
+//----------------------------------------
+
 void pinPush_isr(void)
 {
   re_down = ! (PIND & 0x10);
@@ -678,11 +688,33 @@ void pinPush_isr(void)
     // button released, check if rotation, UP event if not
     if (! re_rotation)
     {
-      int push_time = millis() - re_down_time;
+      unsigned long last_up_time = millis();
+      unsigned int push_time = last_up_time - re_down_time;
 
       if (push_time < ReHoldClickTime)
       {
-        event_push(vfo_Click);
+        // check to see if we have a single click very recently
+        if (last_click != 0)
+        {   // did have single click before this
+          unsigned long dclick_delta = last_up_time - last_click;
+
+          // if short time since last click, issue double-click event
+          if (dclick_delta <= ReDClickTime)
+          {
+            event_push(vfo_DClick);
+            last_click = 0;
+          }
+          else
+          {
+            event_push(vfo_Click);
+            last_click = last_up_time;    // single-click, prepare for possible double
+          }
+        }
+        else
+        {
+          event_push(vfo_Click);
+          last_click = last_up_time;    // single-click, prepare for possible double
+        }
       }
       else
       {
@@ -691,6 +723,10 @@ void pinPush_isr(void)
     }
   }
 }
+
+//----------------------------------------
+// Handler for pinA interrupts.
+//----------------------------------------
 
 void pinA_isr(void)
 {
@@ -717,6 +753,10 @@ void pinA_isr(void)
     bFlag = 1;
   }
 }
+
+//----------------------------------------
+// Handler for pinB interrupts.
+//----------------------------------------
 
 void pinB_isr(void)
 {
@@ -745,9 +785,9 @@ void pinB_isr(void)
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // Code to save/restore in EEPROM.
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 // start storing at address 0
 const int EEPROMBase = 0;
@@ -772,11 +812,15 @@ const int AddressBrightnessSize = sizeof(LcdBrightness);
 const int AddressHoldClickTime = AddressBrightness + AddressBrightnessSize;
 const int AddressHoldClickTimeSize = sizeof(ReHoldClickTime);
 
+// address for int 'double click time'
+const int AddressDClickTime = AddressHoldClickTime + AddressHoldClickTimeSize;
+const int AddressDClickTimeSize = sizeof(ReDClickTime);
+
 // number of frequency save slots in EEPROM
 const int NumSaveSlots = 10;
 
 const int SaveFreqSize = sizeof(long);
-const int SaveFreqBase = AddressHoldClickTime + AddressHoldClickTimeSize;
+const int SaveFreqBase = AddressDClickTime + AddressDClickTimeSize;
 const int SaveFreqBaseSize = NumSaveSlots * SaveFreqSize;
 
 //also save the offset for each frequency
@@ -788,7 +832,7 @@ const int SaveOffsetBaseSize = NumSaveSlots * SaveOffsetSize;
 const int NextFreeAddress = SaveOffsetBase + SaveOffsetBaseSize;
 
 //----------------------------------------
-// save VFO state to EEPROM
+// Save VFO state to EEPROM.
 //----------------------------------------
 
 void save_to_eeprom(void)
@@ -798,10 +842,11 @@ void save_to_eeprom(void)
   EEPROM.put(AddressBrightness, LcdBrightness);
   EEPROM.put(AddressContrast, LcdContrast);
   EEPROM.put(AddressHoldClickTime, ReHoldClickTime);
+  EEPROM.put(AddressDClickTime, ReDClickTime);
 }
 
 //----------------------------------------
-// restore VFO state from EEPROM
+// Restore VFO state from EEPROM.
 //----------------------------------------
 
 void restore_from_eeprom(void)
@@ -811,10 +856,11 @@ void restore_from_eeprom(void)
   EEPROM.get(AddressBrightness, LcdBrightness);
   EEPROM.get(AddressContrast, LcdContrast);
   EEPROM.get(AddressHoldClickTime, ReHoldClickTime);
+  EEPROM.get(AddressDClickTime, ReDClickTime);
 }
 
 //----------------------------------------
-// given slot number, return freq/offset
+// Given slot number, return freq/offset.
 //----------------------------------------
 
 void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
@@ -827,7 +873,7 @@ void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
 }
 
 //----------------------------------------
-// put frequency/offset into given slot number
+// Put frequency/offset into given slot number.
 //----------------------------------------
 
 void put_slot(int slot_num, Frequency freq, SelOffset offset)
@@ -840,7 +886,7 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 }
 
 //----------------------------------------
-// print all EEPROM saved data to console
+// Print all EEPROM saved data to console.
 //----------------------------------------
 
 void dump_eeprom(void)
@@ -849,19 +895,23 @@ void dump_eeprom(void)
   SelOffset offset;
   int brightness;
   int contrast;
-  int hold;
+  unsigned int hold;
+  unsigned int dclick;
 
   EEPROM.get(AddressFreq, ulong);
   EEPROM.get(AddressSelDigit, offset);
   EEPROM.get(AddressBrightness, brightness);
   EEPROM.get(AddressContrast, contrast);
   EEPROM.get(AddressHoldClickTime, hold);
+  EEPROM.get(AddressDClickTime, dclick);
+  
   Serial.printf(F("=================================================\n"));
   Serial.printf(F("dump_eeprom: VfoFrequency=%ld\n"), ulong);
   Serial.printf(F("             AddressSelDigit=%d\n"), offset);
   Serial.printf(F("             LcdBrightness=%d\n"), brightness);
   Serial.printf(F("             LcdContrast=%d\n"), contrast);
-  Serial.printf(F("             ReHoldClickTime=%d\n"), hold);
+  Serial.printf(F("             ReHoldClickTime=%dmsec\n"), hold);
+  Serial.printf(F("             ReDClickTime=%dmsec\n"), dclick);
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
@@ -872,12 +922,12 @@ void dump_eeprom(void)
   Serial.printf(F("=================================================\n"));
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // Code to handle the DDS-60
 //
 // From: http://www.rocketnumbernine.com/2011/10/25/programming-the-ad9851-dds-synthesizer
 // Andrew Smallbone <andrew@rocketnumbernine.com>
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 //----------------------------------------
 // pulse the 'pin' high and then low
@@ -941,9 +991,9 @@ void dds_setup(void)
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 // Main VFO code
-////////////////////////////////////////////////////////////////////////////////
+//##############################################################################
 
 //----------------------------------------
 // The standard Arduino setup() function.
@@ -1236,6 +1286,7 @@ void reset_action(struct Menu *menu, int item_num)
   LcdBrightness = DefaultLcdBrightness;
   LcdContrast = DefaultLcdContrast;
   ReHoldClickTime = DefaultHoldClickTime;
+  ReDClickTime = DefaultDClickTime;
   
   save_to_eeprom();
 
@@ -1431,14 +1482,16 @@ void contrast_action(struct Menu *menu, int item_num)
 
 //----------------------------------------
 // Draw a click hold time in milliseconds on row 1 of LCD.
+//     msec      the time to show
+//     def_time  the current system time
 //----------------------------------------
 
-void draw_row1_time(int msec)
+void draw_row1_time(unsigned int msec, unsigned int def_time)
 {
   lcd.setCursor(0, 1);
   lcd.print(BlankRow);
   
-  if (msec == ReHoldClickTime)
+  if (msec == def_time)
   {
     lcd.setCursor(0, 1);
     lcd.write(IN_USE_CHAR);
@@ -1463,7 +1516,7 @@ void holdclick_action(struct Menu *menu, int item_num)
 {
   Serial.printf(F("holdclick_action: entered\n"));
 
-  int holdtime = ReHoldClickTime;
+  unsigned int holdtime = ReHoldClickTime;
   
 // the step time for hold click
 #define HOLD_STEP   100
@@ -1476,7 +1529,7 @@ void holdclick_action(struct Menu *menu, int item_num)
   lcd.print(menu->items[item_num]->title);
   
   // show row slot info on row 1
-  draw_row1_time(holdtime);
+  draw_row1_time(holdtime, ReHoldClickTime);
 
   // handle events in our own little event loop
   while (true)
@@ -1514,7 +1567,75 @@ void holdclick_action(struct Menu *menu, int item_num)
       }
 
       // show hold time value in row 1
-      draw_row1_time(holdtime);
+      draw_row1_time(holdtime, ReHoldClickTime);
+    }
+  }
+}
+
+//----------------------------------------
+// Set the current 'doubleclick' time and save to EEPROM if 'actioned'.
+//   menu      address of 'calling' menu
+//   item_num  index of MenuItem we were actioned from
+// This works differently from brightness/contrast.  We show menuitems
+// of the time to use.
+//----------------------------------------
+
+void doubleclick_action(struct Menu *menu, int item_num)
+{
+  Serial.printf(F("doubleclick_action: entered, ReDClickTime=%dmsec\n"), ReDClickTime);
+
+  int dctime = ReDClickTime;
+  
+// the step time for hold click
+#define DCLICK_STEP   100
+
+  // get rid of any stray events to this point
+  event_flush();
+
+  // draw row 0 of menu, get heading from MenuItem
+  lcd.clear();
+  lcd.print(menu->items[item_num]->title);
+  
+  // show row slot info on row 1
+  draw_row1_time(dctime, ReDClickTime);
+
+  // handle events in our own little event loop
+  while (true)
+  {
+    // handle any pending event
+    if (event_pending() > 0)
+    {
+      byte event = event_pop(); // get next event and handle it
+
+      switch (event)
+      {
+        case vfo_RLeft:
+          dctime -= DCLICK_STEP;
+          if (dctime < MinDClickTime)
+            dctime = MinDClickTime;
+          Serial.printf(F("doubleclick_action: vfo_RLeft, after dctime=%d\n"), dctime);
+          break;
+        case vfo_RRight:
+          dctime += HOLD_STEP;
+          if (dctime > MaxDClickTime)
+            dctime = MaxDClickTime;
+          Serial.printf(F("doubleclick_action: vfo_RRight, after dctime=%d\n"), dctime);
+          break;
+        case vfo_Click:
+          ReDClickTime = dctime;
+          save_to_eeprom();
+          display_flash();
+          break;
+        case vfo_HoldClick:
+          event_flush();
+          return;
+        default:
+          // ignored events we don't handle
+          break;
+      }
+
+      // show hold time value in row 1
+      draw_row1_time(dctime, ReDClickTime);
     }
   }
 }
@@ -1536,7 +1657,8 @@ struct Menu reset_menu = {"Reset all", ARRAY_LEN(mia_reset), mia_reset};
 struct MenuItem mi_brightness = {"Brightness", NULL, &brightness_action};
 struct MenuItem mi_contrast = {"Contrast", NULL, &contrast_action};
 struct MenuItem mi_holdclick = {"Hold click", NULL, &holdclick_action};
-struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast, &mi_holdclick};
+struct MenuItem mi_doubleclick = {"Double click", NULL, &doubleclick_action};
+struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast, &mi_holdclick, &mi_doubleclick};
 struct Menu settings_menu = {"Settings", ARRAY_LEN(mia_settings), mia_settings};
 
 //----------------------------------------
@@ -1607,6 +1729,9 @@ void loop(void)
         menu_show(&menu_main, 0);    // redisplay the original menu
         show_main_screen();
         save_to_eeprom();   // save any changes made
+        break;
+      case vfo_DClick:
+        Serial.printf(F("loop: Got vfo_DClick: ignored\n"));
         break;
       default:
         Serial.printf(F("loop: Unrecognized event: %d\n"), event);
