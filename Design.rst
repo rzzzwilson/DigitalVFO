@@ -86,6 +86,8 @@ further logical events to get a set of VFO events:
 +-------+---------------+-------------------------------------------+
 |   6	| vfo_HoldClick | Held click of the switch without rotation |
 +-------+---------------+-------------------------------------------+
+|   7	| vfo_DClick    | Double click within a certain period      |
++-------+---------------+-------------------------------------------+
 
 The mapping between the RE events and VFO events is explained below:
 
@@ -100,6 +102,8 @@ The mapping between the RE events and VFO events is explained below:
 +-----------+------------------------------------------------------------------------------+
 | re_Up     | If elapsed 'down' time is short -> vfo_Click, else -> vfo_HoldClick.         |
 |           | If there was any rotation while down no event posted.  Clear 'down' state.   |
+|           | If a particular single click was close enough to the previous single click   |
+|           | issue a vfo_DClick instead.                                                  |
 +-----------+------------------------------------------------------------------------------+
 
 The above implies that there will be internal state to the RE code encapsulating:
@@ -125,4 +129,23 @@ The *pop_event()* function will return a *vfo_None* event if the queue is empty.
 The queue will be implemented as a circular buffer with length of about
 10 events.  Note that the *pop_event()* function *must* be thread safe.
 The *push_event()* function runs in the interrupt handler so is safe.
+
+Main Event loop
+---------------
+
+There will be a main event loop within the Arduino *setup()* function to handle
+most top-level interaction.  There will be some smaller event loops within some
+menu action handler routines.
+
+Menu System
+===========
+
+There will be a menu system that will allow the user to:
+
+* Save/Restore/Delete slots.  Slots hold frequency and other information.
+* Reset certain parameters that render the UI unusable, such as brightness, contrast, etc.
+* Reset all slots and set configurable parameters to the defaults.
+* Configure certain values for brightness, contrast, etc.
+* Calibrate the VFO oscillator.
+* Etc.
 
