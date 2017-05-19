@@ -14,9 +14,11 @@ Completed:
 * Save state in the EEPROM, restore state on start up
 * implement a simple menu system 
 * extend the menu system to allow extra functionality
+* added vfo_DClick double-click event
   
 To be done:
 
+* add code to toggle standby/ON mode (from vfo_DClick)
 * add in the DDS-60 control code (should be easy?)
 
 About
