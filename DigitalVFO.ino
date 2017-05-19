@@ -17,9 +17,8 @@
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
-const char *Version = "0.9";
+const char *Version = "1.0";
 const char *Callsign = "vk4fawr";
-const char *Callsign16 = "vk4fawr         ";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
 #define NUM_ROWS        2
@@ -206,6 +205,21 @@ const char *event2display(VFOEvent event)
 }
 
 //----------------------------------------
+// show the credits
+//----------------------------------------
+
+void show_credits(void)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(ProgramName);
+  lcd.print(" ");
+  lcd.print(Version);
+  lcd.setCursor(NUM_COLS-strlen(Callsign), 1);
+  lcd.print(Callsign);
+}
+
+//----------------------------------------
 // display a simple banner on the LCD
 //----------------------------------------
 
@@ -213,23 +227,17 @@ void banner(void)
 {
   Serial.printf(F("%s %s (%s)\n"), ProgramName, Version, Callsign);
 
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(ProgramName);
-  lcd.print(" ");
-  lcd.print(Version);
-  lcd.setCursor(0, 1);
-  lcd.print(Callsign);
+  show_credits();
   delay(900);    // wait a bit
 
-  // do a fade out
+  // do a fade out, clear screen then full brightness
   for (int i = LcdBrightness; i; --i)
   {
     analogWrite(mc_Brightness, i);
     delay(10);
   }
   lcd.clear();
-  delay(300);
+  delay(400);
   analogWrite(mc_Brightness, LcdBrightness);
 }
 
@@ -641,10 +649,10 @@ volatile byte bFlag = 0;
 
 bool re_setup(void)
 {
-  // set RE data pins as pullup inputs
-  pinMode(re_pinA, INPUT_PULLUP);
-  pinMode(re_pinB, INPUT_PULLUP);
-  pinMode(re_pinPush, INPUT_PULLUP);
+  // set RE data pins as inputs
+  pinMode(re_pinA, INPUT);
+  pinMode(re_pinB, INPUT);
+  pinMode(re_pinPush, INPUT);
 
   // attach pins to IST on rising edge only
   attachInterrupt(digitalPinToInterrupt(re_pinA), pinA_isr, RISING);
@@ -653,9 +661,6 @@ bool re_setup(void)
 
   // look at RE button, if DOWN this function returns 'true'
   return ! (PIND & 0x10);
-  
-//  if (re_down)
-//  return false;
 }
 
 void pinPush_isr(void)
@@ -995,27 +1000,26 @@ void setup(void)
   // show program name and version number
   banner();
 
-  // we sometimes see random events on powerup, flush them here
-  event_flush();
-  
   // dump EEPROM values
   dump_eeprom();
 
   // we sometimes see random events on powerup, flush them here
-  event_flush();
+//  event_flush();
 
   // get going
   show_main_screen();
 }
 
 //----------------------------------------
+// Show the main screen.
+// Room for 'mode', etc, display on second row
 //----------------------------------------
 
 void show_main_screen(void)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Freq:");
+  lcd.print("Vfo:");
   display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
   lcd.print("Hz");
 }
@@ -1246,6 +1250,47 @@ void reset_action(struct Menu *menu, int item_num)
 
 void reset_no_action(struct Menu *menu, int item_num)
 {
+}
+
+//----------------------------------------
+// Show the credits.
+//   menu      address of 'calling' menu
+//   item_num  index of MenuItem we were actioned from
+// Wait here until VfoClick.
+//----------------------------------------
+
+void credits_action(struct Menu *menu, int item_num)
+{
+  // get rid of any stray events to this point
+  event_flush();
+
+  // show the credits
+  show_credits();
+  
+  // handle events in our own little event loop
+  while (true)
+  {
+    // handle any pending event
+    if (event_pending() > 0)
+    {
+      byte event = event_pop(); // get next event and handle it
+
+      switch (event)
+      {
+        case vfo_RLeft:
+          break;
+        case vfo_RRight:
+          break;
+        case vfo_Click:
+          return;
+        case vfo_HoldClick:
+          return;
+        default:
+          // ignored events we don't handle
+          break;
+      }
+    }
+  }
 }
 
 //----------------------------------------
@@ -1503,7 +1548,8 @@ struct MenuItem mi_restore = {"Restore slot", NULL, &restoreslot_action};
 struct MenuItem mi_del = {"Delete slot", NULL, &deleteslot_action};
 struct MenuItem mi_settings = {"Settings", &settings_menu, NULL};
 struct MenuItem mi_reset = {"Reset all", &reset_menu, NULL};
-struct MenuItem *mia_main[] = {&mi_save, &mi_restore, &mi_del, &mi_settings, &mi_reset};
+struct MenuItem mi_credits = {"Credits", NULL, &credits_action};
+struct MenuItem *mia_main[] = {&mi_save, &mi_restore, &mi_del, &mi_settings, &mi_reset, &mi_credits};
 struct Menu menu_main = {"Menu", ARRAY_LEN(mia_main), mia_main};
 
 
