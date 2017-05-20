@@ -19,10 +19,11 @@ Completed:
 * added vfo_DClick double-click event
 * add code to toggle standby/ON mode (from vfo_DClick)
 * add in the DDS-60 control code
+* add a "Calibrate" setting to adjust the divider value in the DDS-60 code
   
 To be done:
 
-* add a "Calibrate" setting to adjust the divider value in the DDS-60 code
+* test the thing fully!
 * make up a metal case and rebuild into it
 
 About
