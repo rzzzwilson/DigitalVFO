@@ -24,6 +24,7 @@ Completed:
 To be done:
 
 * test the thing fully!
+* think about making a circuit board for it (using Fritzing and chap Chinese PCB maker?)
 * make up a metal case and rebuild into it
 
 About
