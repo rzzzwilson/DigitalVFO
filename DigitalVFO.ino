@@ -285,7 +285,7 @@ const char *mode2display(Mode mode)
   switch (mode)
   {
     case vfo_Standby: return "standby";
-    case vfo_Online:  return "ON";
+    case vfo_Online:  return "ONLINE";
   }
 
   return "UNKNOWN";
