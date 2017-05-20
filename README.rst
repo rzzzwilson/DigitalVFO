@@ -4,6 +4,8 @@ Digital VFO
 Status
 ======
 
+The basic VFO is working.  Almost complete - on the breadboard!
+
 Completed:
 
 * Interface display to teensy, test writing, etc
@@ -15,11 +17,13 @@ Completed:
 * implement a simple menu system 
 * extend the menu system to allow extra functionality
 * added vfo_DClick double-click event
+* add code to toggle standby/ON mode (from vfo_DClick)
+* add in the DDS-60 control code
   
 To be done:
 
-* add code to toggle standby/ON mode (from vfo_DClick)
-* add in the DDS-60 control code (should be easy?)
+* add a "Calibrate" setting to adjust the divider value in the DDS-60 code
+* make up a metal case and rebuild into it
 
 About
 =====
