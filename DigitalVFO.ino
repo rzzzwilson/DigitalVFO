@@ -21,14 +21,13 @@ const char *Version = "1.0";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
-#define NUM_ROWS        2
-#define NUM_COLS        16
+const int NumRows = 2;
+const int NumCols = 16;
 
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof(a[0]))
 
-// define one row of blanks
-// FIXME: should be dynamic
+// string holding one entire blank row (allocated in setup())
 char *BlankRow = NULL;
 
 // define data pins we connect to the LCD
@@ -55,16 +54,16 @@ const byte DDS_DATA = 16;     // connected to AD9851 D7 (serial data) pin
 
 
 // max and min frequency showable
-#define MAX_FREQ        30000000L
-#define MIN_FREQ        1000000L
+const unsigned long MaxFreq = 30000000L;
+const unsigned long MinFreq = 1000000L;
 
 // size of frequency display in chars (30MHz is maximum frequency)
-#define MAX_FREQ_CHARS  8
+const int NumFreqChars = 8;
 
 // address in display CGRAM for definable and other characters
-#define SELECT_CHAR     0     // shows 'underlined' decimal digits (dynamic, 0 to 9)
-#define SPACE_CHAR      1     // shows an 'underlined' space character
-#define ALLSET_CHAR     0xff  // the 'all bits set' char in display RAM, used for 'bar' display
+const int SelectChar = 0;     // shows 'underlined' decimal digits (dynamic, 0 to 9)
+const int SpaceChar = 1;      // shows an 'underlined' space character
+const int AllsetChar = 0xff;  // the 'all bits set' char in display RAM, used for 'bar' display
 
 // define the numeric digits and space with selection underline
 byte sel0[8] = {0xe,0x11,0x13,0x15,0x19,0x11,0xe,0x1f};
@@ -81,7 +80,7 @@ byte selspace[8] = {0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x1f};
 
 // array of references to the 11 'selected' characters (0 to 9 plus space)
 byte *sel_digits[] = {sel0, sel1, sel2, sel3, sel4, sel5, sel6, sel7, sel8, sel9, selspace};
-#define SPACE_INDEX   10
+const int SpaceIndex = 10;
 
 // map select_offset to bump values
 unsigned long offset2bump[] = {1,           // offset = 0
@@ -98,38 +97,47 @@ unsigned long offset2bump[] = {1,           // offset = 0
 LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
 
 // define the VFOevents
-#define vfo_None      0
-#define vfo_RLeft     1
-#define vfo_RRight    2
-#define vfo_DnRLeft   3
-#define vfo_DnRRight  4
-#define vfo_Click     5
-#define vfo_HoldClick 6
-#define vfo_DClick    7
+enum Event
+{
+  vfo_None,
+  vfo_RLeft,
+  vfo_RRight,
+  vfo_DnRLeft,
+  vfo_DnRRight,
+  vfo_Click,
+  vfo_HoldClick,
+  vfo_DClick,
+};
 
 // the "in use" display character, "→"
-#define IN_USE_CHAR   0x7e
+const int InUseChar = 0x7e;
 
 // default LCD contrast & brightness
 const unsigned int DefaultLcdContrast = 70;
 const unsigned int DefaultLcdBrightness = 150;
 
 // VFO modes - online or standby
-#define vfo_Standby   0
-#define vfo_Online    1
+enum Mode 
+{
+  vfo_Standby,
+  vfo_Online
+};
 
 // stuff for the calibrate action
 const int MinClockOffset = -32000;
 const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
+// define the length of the event queue
+const int EventQueueLength = 10;
+
 
 //##############################################################################
 // The VFO state variables and typedefs
 //##############################################################################
 
-typedef unsigned int Mode;
-Mode VfoMode;               // VFO mode
+//typedef unsigned int Mode;
+enum Mode VfoMode;          // VFO mode
 
 typedef unsigned long Frequency;
 Frequency VfoFrequency;     // VFO frequency (Hz)
@@ -154,35 +162,35 @@ int VfoClockOffset = 0;
 // Abort the program.
 // Tries to tell the world what went wrong, then just loops.
 //     msg  address of error string
-// Only first NUM_ROWS*NUM_COLS chars of message is displayed on LCD.
+// Only first NumRows*NumCols chars of message is displayed on LCD.
 //----------------------------------------
 
 void abort(const char *msg)
 {
-  char buf[NUM_COLS*NUM_ROWS+1];
+  char buf[NumCols*NumRows+1];
   char *ptr = buf;
   
   // print error on console (maybe)
   Serial.printf(F("message=%s\nTeensy is paused!\n"), msg);
 
-  // truncate/pad message to NUM_ROWS * NUM_COLS chars
-  for (int i = 0; i < NUM_COLS*NUM_ROWS; ++i)
+  // truncate/pad message to NumRows * NumCols chars
+  for (int i = 0; i < NumCols*NumRows; ++i)
     *ptr++ = ' ';
   *ptr = '\0';
   
-  strncpy(buf, msg, NUM_COLS*NUM_ROWS);
-  if (strlen(msg) < NUM_COLS*NUM_ROWS)
+  strncpy(buf, msg, NumCols*NumRows);
+  if (strlen(msg) < NumCols*NumRows)
     strncpy(buf + strlen(msg), "                                ",
-            NUM_COLS*NUM_ROWS - strlen(msg));
+            NumCols*NumRows - strlen(msg));
 
   // show what we can on the display, forever
   while (1)
   {
     lcd.clear();
-    for (int i = 0; i < NUM_ROWS; ++i)
+    for (int i = 0; i < NumRows; ++i)
     {
       lcd.setCursor(0, i);
-      lcd.print(buf + i*NUM_COLS);
+      lcd.print(buf + i*NumCols);
     }
     delay(2000);
 
@@ -230,7 +238,7 @@ void show_credits(void)
   lcd.print(ProgramName);
   lcd.print(" ");
   lcd.print(Version);
-  lcd.setCursor(NUM_COLS-strlen(Callsign), 1);
+  lcd.setCursor(NumCols-strlen(Callsign), 1);
   lcd.print(Callsign);
 }
 
@@ -387,7 +395,7 @@ void menuitem_draw(struct Menu *menu, int item_num)
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
   lcd.print(BlankRow);
-  lcd.setCursor(NUM_COLS - max_len, 1);
+  lcd.setCursor(NumCols - max_len, 1);
   lcd.print(menu->items[item_num]->title);
 }
 
@@ -491,9 +499,7 @@ void display_flash(void)
 // Implemented as a circular buffer.
 //##############################################################################
 
-#define QueueLength 10
-
-VFOEvent event_queue[QueueLength];
+VFOEvent event_queue[EventQueueLength];
 int queue_fore = 0;   // fore pointer into circular buffer
 int queue_aft = 0;    // aft pointer into circular buffer
 
@@ -507,7 +513,7 @@ void event_push(VFOEvent event)
 
   // move fore ptr one slot up, wraparound if necessary
   ++queue_fore;
-  if (queue_fore >= QueueLength)
+  if (queue_fore >= EventQueueLength)
     queue_fore = 0;
 
   // if queue full, abort
@@ -534,7 +540,7 @@ VFOEvent event_pop(void)
 
   // move aft pointer up one slot, wrap if necessary
   ++queue_aft;
-  if (queue_aft  >= QueueLength)
+  if (queue_aft  >= EventQueueLength)
     queue_aft = 0;
 
   interrupts();
@@ -552,7 +558,7 @@ int event_pending(void)
 
   // handle case when events wrap around
   if (result < 0)
-    result += QueueLength;
+    result += EventQueueLength;
 
   interrupts();
 
@@ -577,7 +583,7 @@ void event_dump_queue(const char *msg)
 
   Serial.printf(F("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"));
   Serial.printf(F("Queue: %s\n"), msg);
-  for (int i = 0; i < QueueLength; ++i)
+  for (int i = 0; i < EventQueueLength; ++i)
   {
     VFOEvent event = event_queue[i];
 
@@ -616,7 +622,7 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
   ulong2buff(buf, num_digits, value);
 
   // create special underlined selection character including selected digit
-  lcd.createChar(SELECT_CHAR, sel_digits[int(buf[index])]);
+  lcd.createChar(SelectChar, sel_digits[int(buf[index])]);
 
   // we set cursor here because we lose cursor position after lcd.createChar()!?
   // would prefer to set cursor position outside this function, but ไม่เป็นไร.
@@ -634,7 +640,7 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
     {
       if (index == i)
       {
-        lcd.write(byte(SPACE_CHAR));
+        lcd.write(byte(SpaceChar));
       }
       else
       {
@@ -645,7 +651,7 @@ void display_sel_value(unsigned long value, int sel_col, int num_digits, int col
     {
       if (index == i)
       {
-        lcd.write(byte(SELECT_CHAR));
+        lcd.write(byte(SelectChar));
       }
       else
       {
@@ -685,7 +691,7 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
   ulong2buff(buf, num_digits, value);
 
   // create special underlined selection character including selected digit
-  lcd.createChar(SELECT_CHAR, sel_digits[int(buf[index])]);
+  lcd.createChar(SelectChar, sel_digits[int(buf[index])]);
 
   // we set cursor here because we lose cursor position after lcd.createChar()!?
   // would prefer to set cursor position outside this function, but ไม่เป็นไร.
@@ -706,7 +712,7 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
     {
       if (index == i)
       {
-        lcd.write(byte(SPACE_CHAR));
+        lcd.write(byte(SpaceChar));
       }
       else
       {
@@ -717,7 +723,7 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
     {
       if (index == i)
       {
-        lcd.write(byte(SELECT_CHAR));
+        lcd.write(byte(SelectChar));
       }
       else
       {
@@ -735,20 +741,20 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
 
 // time when click becomes a "hold click" (milliseconds)
 // the delay is configurable in the UI
-#define MinHoldClickTime        100
-#define MaxHoldClickTime        1000
-#define DefaultHoldClickTime    500
+const int MinHoldClickTime = 100;     // min configurable time
+const int MaxHoldClickTime = 1000;    // max configurable time
+const int DefaultHoldClickTime = 500; // default time
 
 // time when click becomes a "double click" (milliseconds)
 // the delay is configurable in the UI
-#define MinDClickTime           100
-#define MaxDClickTime           1000
-#define DefaultDClickTime       300
+const int MinDClickTime = 100;        // min configurable time
+const int MaxDClickTime = 1000;       // max configurable time
+const int DefaultDClickTime = 300;    // default time
 
+// internal variables
 unsigned int ReHoldClickTime = DefaultHoldClickTime;
 unsigned int ReDClickTime = DefaultDClickTime;
 
-// internal variables
 bool re_rotation = false;       // true if rotation occurred while knob down
 bool re_down = false;           // true while knob is down
 unsigned long re_down_time = 0; // milliseconds when knob is pressed down
@@ -778,6 +784,7 @@ bool re_setup(void)
   attachInterrupt(digitalPinToInterrupt(re_pinPush), pinPush_isr, CHANGE);
 
   // look at RE button, if DOWN this function returns 'true'
+  // FIXME - Worry about bounce?
   return ! (PIND & 0x10);
 }
 
@@ -787,7 +794,7 @@ bool re_setup(void)
 
 void pinPush_isr(void)
 {
-  cli();
+  noInterrupts();
 
   re_down = ! (PIND & 0x10);
   
@@ -837,7 +844,7 @@ void pinPush_isr(void)
     }
   }
 
-  sei();
+  interrupts();
 }
 
 //----------------------------------------
@@ -848,7 +855,7 @@ void pinA_isr(void)
 {
   byte reading;
 
-  cli();
+  noInterrupts();
 
   reading = PIND & 0xC;
 
@@ -873,7 +880,7 @@ void pinA_isr(void)
     bFlag = 1;
   }
 
-  sei();
+  interrupts();
 }
 
 //----------------------------------------
@@ -884,7 +891,7 @@ void pinB_isr(void)
 {
   byte reading;
 
-  cli();
+  noInterrupts();
 
   reading = PIND & 0xC;
 
@@ -909,13 +916,18 @@ void pinB_isr(void)
     aFlag = 1;
   }
 
-  sei();
+  interrupts();
 }
 
 
 //##############################################################################
 // Code to save/restore in EEPROM.
 //##############################################################################
+
+// Define the address in EEPROM of various things.
+// The "NEXT_FREE" value is the address of the next free slot address.
+// Ignore "redefine errors" - silly compiler!
+// The idea is that we are free to rearrange objects below with minimum fuss
 
 // start storing at address 0
 #define NEXT_FREE   (0)
@@ -1102,17 +1114,17 @@ void dds_tfr_byte(byte data)
 
 void dds_update(Frequency frequency)
 {
-//  int32_t data = frequency * 4294967296.0 / 180.0e6;
-  unsigned long data = frequency * 4294967296 / (6 * (30000000 - VfoClockOffset));
+  // as in datasheet page 12 - modified to include calibration offset
+  unsigned long data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
 
   Serial.printf(F("dds_update: frequency=%ld, VfoClockOffset=%d, data=%ld\n"),
                 frequency, VfoClockOffset, data);
-  
+
+  // start programming the DDS-60
   for (int b = 0; b < 4; ++b, data >>= 8)
   {
     dds_tfr_byte(data & 0xFF);
   }
-  
   dds_tfr_byte(0x001);
   dds_pulse_high(DDS_FQ_UD);
 }
@@ -1150,15 +1162,11 @@ void dds_setup(void)
   pinMode(DDS_W_CLK, OUTPUT);
   pinMode(DDS_DATA, OUTPUT);
 
-  // if your board needs it, connect RESET pin and pulse it to reset AD9851
-  // dds_pulse_high(RESET)
-
   // set serial load enable (Datasheet page 15 Fig. 17) 
   dds_pulse_high(DDS_W_CLK);
   dds_pulse_high(DDS_FQ_UD);
 
-  // wait a bit, then go into standby
-  delay(100);
+  // go into standby
   dds_standby();
 }
 
@@ -1175,10 +1183,10 @@ void dds_setup(void)
 void setup(void)
 {
   // initialize the BlankRow global to a blank string length of a display row
-  BlankRow = (char *) malloc(NUM_COLS + 1);     // size of one display row
-  for (int i = 0; i < NUM_COLS; ++i)
+  BlankRow = (char *) malloc(NumCols + 1);     // size of one display row
+  for (int i = 0; i < NumCols; ++i)
     BlankRow[i] = ' ';
-  BlankRow[NUM_COLS] = '\0';
+  BlankRow[NumCols] = '\0';
 
   // initialize the serial console
   Serial.begin(115200);
@@ -1196,12 +1204,12 @@ void setup(void)
   analogWrite(mc_Contrast, LcdContrast);
 
   // initialize the display
-  lcd.begin(NUM_COLS, NUM_ROWS);      // define display size
+  lcd.begin(NumCols, NumRows);      // define display size
   lcd.clear();
   lcd.noCursor();
 
   // create underlined space for frequency display
-  lcd.createChar(SPACE_CHAR, sel_digits[SPACE_INDEX]);
+  lcd.createChar(SpaceChar, sel_digits[SpaceIndex]);
 
   // set up the DDS device
   dds_setup();
@@ -1254,7 +1262,7 @@ void show_main_screen(void)
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Vfo:");
-  display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
+  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
   lcd.print("Hz");
 
   lcd.setCursor(0, 1);
@@ -1278,12 +1286,12 @@ void show_slot_frequency(int slot_num)
   if (VfoFrequency == freq)
   {
     lcd.setCursor(0, 1);
-    lcd.write(IN_USE_CHAR);
+    lcd.write(InUseChar);
   }
   lcd.setCursor(4, 1);
   lcd.write(slot_num + '0');
   lcd.print(":");
-  display_sel_value(freq, -1, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 1);
+  display_sel_value(freq, -1, NumFreqChars, NumCols - NumFreqChars - 2, 1);
   lcd.print("Hz");
 }
 
@@ -1470,7 +1478,7 @@ void reset_action(struct Menu *menu, int item_num)
   SelOffset zero_offset = 0;
   
   // zero the frequency+selected values
-  VfoFrequency = MIN_FREQ;
+  VfoFrequency = MinFreq;
   VfoSelectDigit = 0;
   VfoClockOffset = 0;
   LcdBrightness = DefaultLcdBrightness;
@@ -1545,7 +1553,7 @@ void draw_row1_bar(int length)
   lcd.print(BlankRow);
   lcd.setCursor(0, 1);
   for (int i = 0; i < length; ++i)
-    lcd.write(ALLSET_CHAR);
+    lcd.write(AllsetChar);
 }
 
 //----------------------------------------
@@ -1684,7 +1692,7 @@ void draw_row1_time(unsigned int msec, unsigned int def_time)
   if (msec == def_time)
   {
     lcd.setCursor(0, 1);
-    lcd.write(IN_USE_CHAR);
+    lcd.write(InUseChar);
   }
   
   lcd.setCursor(8, 1);
@@ -1946,7 +1954,7 @@ void vfo_toggle_mode(void)
     VfoMode = vfo_Online;
   }
 
-  // update display
+  // clear row 1 and write new mode string
   lcd.setCursor(0, 1);
   lcd.write(BlankRow);
   lcd.setCursor(0, 1);
@@ -1976,7 +1984,7 @@ struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast, &mi_holdclick,
 struct Menu settings_menu = {"Settings", ALEN(mia_settings), mia_settings};
 
 //----------------------------------------
-// main menu
+// Main menu
 //----------------------------------------
 
 struct MenuItem mi_save = {"Save slot", NULL, &saveslot_action};
@@ -1995,9 +2003,11 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 
 void loop(void)
 {
+#ifdef JUNK
   // remember old values, update screen if changed
   Frequency old_freq = VfoFrequency;
   int old_position = VfoSelectDigit;
+#endif
 
   // handle all events in the queue
   while (event_pending() > 0)
@@ -2010,24 +2020,24 @@ void loop(void)
       case vfo_RLeft:
         Serial.printf(F("loop: vfo_RLeft\n"));
         VfoFrequency -= offset2bump[VfoSelectDigit];
-        if (VfoFrequency < MIN_FREQ)
-          VfoFrequency = MIN_FREQ;
-        if (VfoFrequency > MAX_FREQ)
-          VfoFrequency = MAX_FREQ;
+        if (VfoFrequency < MinFreq)
+          VfoFrequency = MinFreq;
+        if (VfoFrequency > MaxFreq)
+          VfoFrequency = MaxFreq;
        break;
       case vfo_RRight:
         Serial.printf(F("loop: vfo_RRight\n"));
         VfoFrequency += offset2bump[VfoSelectDigit];
-        if (VfoFrequency < MIN_FREQ)
-          VfoFrequency = MIN_FREQ;
-        if (VfoFrequency > MAX_FREQ)
-          VfoFrequency = MAX_FREQ;
+        if (VfoFrequency < MinFreq)
+          VfoFrequency = MinFreq;
+        if (VfoFrequency > MaxFreq)
+          VfoFrequency = MaxFreq;
         break;
       case vfo_DnRLeft:
         Serial.printf(F("loop: vfo_DnRLeft\n"));
         VfoSelectDigit += 1;        
-        if (VfoSelectDigit >= MAX_FREQ_CHARS)
-          VfoSelectDigit = MAX_FREQ_CHARS - 1;
+        if (VfoSelectDigit >= NumFreqChars)
+          VfoSelectDigit = NumFreqChars - 1;
         break;
       case vfo_DnRRight:
         Serial.printf(F("loop: vfo_DnRRight\n"));
@@ -2053,17 +2063,12 @@ void loop(void)
         break;
     }
 
-    // display frequency if changed, update DDS-60 if online
-    if (old_freq != VfoFrequency || old_position != VfoSelectDigit)
-    {
-      display_sel_value(VfoFrequency, VfoSelectDigit, MAX_FREQ_CHARS, NUM_COLS - MAX_FREQ_CHARS - 2, 0);
-      old_freq = VfoFrequency;
-      old_position = VfoSelectDigit;
+    // update the display, write changes to EEPROM
+    display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
+    save_to_eeprom();         // FIXME: worry about frequent writes?
 
-      save_to_eeprom();         // worry about frequent writes?
-
-      if (VfoMode == vfo_Online)
-        dds_update(VfoFrequency);
-    }
+    // if online, update DDS-60
+    if (VfoMode == vfo_Online)
+      dds_update(VfoFrequency);
   }
 }
