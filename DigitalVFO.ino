@@ -68,6 +68,8 @@ const int NumFreqChars = 8;
 // address in display CGRAM for definable and other characters
 const int SelectChar = 0;     // shows 'underlined' decimal digits (dynamic, 0 to 9)
 const int SpaceChar = 1;      // shows an 'underlined' space character
+const int InUseChar = 2;      // shosws a right-facing arrow
+
 const int AllsetChar = 0xff;  // the 'all bits set' char in display RAM, used for 'bar' display
 
 // define the numeric digits and space with selection underline
@@ -87,6 +89,9 @@ byte selspace[8] = {0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x1f};
 byte *sel_digits[] = {sel0, sel1, sel2, sel3, sel4, sel5, sel6, sel7, sel8, sel9, selspace};
 const int SpaceIndex = 10;
 
+// define the "in use" character
+byte in_use_char[8] = {0x10,0x18,0x1c,0x1e,0x1c,0x18,0x10,0x00};
+
 // map select_offset to bump values
 unsigned long offset2bump[] = {1,           // offset = 0
                                10,          // 1
@@ -100,9 +105,6 @@ unsigned long offset2bump[] = {1,           // offset = 0
 
 // string holding one entire blank row (allocated in setup())
 char *BlankRow = NULL;
-
-// the "in use" display character, "→"
-const int InUseChar = 0x7e;
 
 // default LCD contrast & brightness
 const unsigned int DefaultLcdContrast = 70;
@@ -1267,6 +1269,9 @@ void setup(void)
   // create underlined space for frequency display
   lcd.createChar(SpaceChar, sel_digits[SpaceIndex]);
 
+  // create the "in use" char for use in menus
+  lcd.createChar(InUseChar, in_use_char);
+
   // set up the DDS device
   dds_setup();
 
@@ -1339,7 +1344,7 @@ void show_slot_frequency(int slot_num)
   if (VfoFrequency == freq)
   {
     lcd.setCursor(0, 1);
-    lcd.write(InUseChar);
+    lcd.write(byte(InUseChar));
   }
   lcd.setCursor(4, 1);
   lcd.write(slot_num + '0');
@@ -1771,7 +1776,7 @@ void draw_row1_time(unsigned int msec, unsigned int def_time)
   if (msec == def_time)
   {
     lcd.setCursor(0, 1);
-    lcd.write(InUseChar);
+    lcd.write(byte(InUseChar));
   }
   
   lcd.setCursor(8, 1);
