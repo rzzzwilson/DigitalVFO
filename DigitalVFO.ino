@@ -18,19 +18,18 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.0";
+const char *MinorVersion = ".1";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
 const int NumRows = 2;
 const int NumCols = 16;
 
-// macro to get number of elements in an array
-#define ALEN(a)    (sizeof(a)/sizeof(a[0]))
+//-----
+// Pins used by microcontroller to control devices.
+//-----
 
-// string holding one entire blank row (allocated in setup())
-char *BlankRow = NULL;
-
-// define data pins we connect to the LCD
+// define microcontroller data pins we connect to the LCD
 const byte lcd_RS = 7;
 const byte lcd_ENABLE = 8;
 const byte lcd_D4 = 9;
@@ -38,26 +37,32 @@ const byte lcd_D5 = 10;
 const byte lcd_D6 = 11;
 const byte lcd_D7 = 12;
 
-// define data pins used by the rotary encoder
+// define the display connections
+LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
+
+// define microcontroller pins controlling brightness and contrast
+const byte mc_Brightness = 5;
+const byte mc_Contrast = 6;
+
+// define microcontroller pins connected to the rotary encoder
 const int re_pinA = 2;     // encoder A pin
 const int re_pinB = 3;     // encoder B pin
 const int re_pinPush = 4;  // encoder pushbutton pin
 
-// define pin controlling brightness and contrast
-const byte mc_Brightness = 5;
-const byte mc_Contrast = 6;
-
-// define pins that control the DDS-60
+// define microcontroller pins that control the DDS-60
 const byte DDS_FQ_UD = 14;    // connected to AD9851 device select pin
 const byte DDS_W_CLK = 15;    // connected to AD9851 clock pin
 const byte DDS_DATA = 16;     // connected to AD9851 D7 (serial data) pin 
 
+//-----
+// Data and values used by the LCD code.
+//-----
 
 // max and min frequency showable
 const unsigned long MaxFreq = 30000000L;
 const unsigned long MinFreq = 1000000L;
 
-// size of frequency display in chars (30MHz is maximum frequency)
+// number of digits in the frequency display
 const int NumFreqChars = 8;
 
 // address in display CGRAM for definable and other characters
@@ -93,8 +98,19 @@ unsigned long offset2bump[] = {1,           // offset = 0
                                10000000,    // 7
                                100000000};  // 8
 
-// define the display connections
-LiquidCrystal lcd(lcd_RS, lcd_ENABLE, lcd_D4, lcd_D5, lcd_D6, lcd_D7);
+// string holding one entire blank row (allocated in setup())
+char *BlankRow = NULL;
+
+// the "in use" display character, "→"
+const int InUseChar = 0x7e;
+
+// default LCD contrast & brightness
+const unsigned int DefaultLcdContrast = 70;
+const unsigned int DefaultLcdBrightness = 150;
+
+//-----
+// Events and the event queue.
+//-----
 
 // define the VFOevents
 enum Event
@@ -109,12 +125,12 @@ enum Event
   vfo_DClick,
 };
 
-// the "in use" display character, "→"
-const int InUseChar = 0x7e;
+// define the length of the event queue
+const int EventQueueLength = 10;
 
-// default LCD contrast & brightness
-const unsigned int DefaultLcdContrast = 70;
-const unsigned int DefaultLcdBrightness = 150;
+//-----
+// VFO modes.
+//-----
 
 // VFO modes - online or standby
 enum Mode 
@@ -123,20 +139,26 @@ enum Mode
   vfo_Online
 };
 
+//-----
+// Miscellaneous.
+//-----
+
 // stuff for the calibrate action
 const int MinClockOffset = -32000;
 const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
-// define the length of the event queue
-const int EventQueueLength = 10;
+// macro to get number of elements in an array
+#define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
 
 
 //##############################################################################
 // The VFO state variables and typedefs
+//
+// The data here will be saved in EEPROM at various times.
+// Code for the device will contain internal variables that aren't saved.
 //##############################################################################
 
-//typedef unsigned int Mode;
 enum Mode VfoMode;          // VFO mode
 
 typedef unsigned long Frequency;
@@ -207,7 +229,8 @@ void abort(const char *msg)
 }
 
 //----------------------------------------
-// Convert an event number to a display string.   Used only for debug.
+// Convert an event number to a display string.
+// Used only for debug.
 //----------------------------------------
 
 const char *event2display(VFOEvent event)
@@ -224,11 +247,11 @@ const char *event2display(VFOEvent event)
     case vfo_DClick:    return "vfo_DClick";
   }
   
-  return "UNKNOWN!";
+  return "UNKNOWN EVENT";
 }
 
 //----------------------------------------
-// show the credits
+// Show the credits on the LCD.
 //----------------------------------------
 
 void show_credits(void)
@@ -243,12 +266,12 @@ void show_credits(void)
 }
 
 //----------------------------------------
-// display a simple banner on the LCD
+// Display a simple banner on the LCD.
 //----------------------------------------
 
 void banner(void)
 {
-  Serial.printf(F("%s %s (%s)\n"), ProgramName, Version, Callsign);
+  Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
 
   show_credits();
   delay(900);    // wait a bit
@@ -269,7 +292,6 @@ void banner(void)
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
 //     value    the Frequency value to convert
-//
 // The function won't overflow the given buffer, it will truncate at the left.
 // For example, given the value 1234 and a buffer of length 7, will fill the
 // buffer with 0001234.  Given 123456789 it will fill with 3456789.
@@ -287,7 +309,7 @@ void ulong2buff(char *buf, int bufsize, unsigned long value)
     int rem = value % 10;
 
     value = value / 10;
-    *ptr-- = char(rem);
+    *ptr-- = char(rem);     // FIXME: don't require char()?
   }
 }
 
@@ -314,9 +336,6 @@ const char *mode2display(Mode mode)
 // handler for selection of an item (vfo_Click event)
 typedef void (*ItemAction)(struct Menu *, int);
 
-// handler for custom item (vfo_RRight, vfo_RLeft events)
-typedef int (*ItemIncDec)(int item_num, int delta);
-
 // structure defining a menu item
 struct MenuItem
 {
@@ -333,8 +352,11 @@ struct Menu
   struct MenuItem **items;    // array of pointers to MenuItem data
 };
 
+//----------------------------------------
 // dump a MenuItem to the console
 // only called from dump_menu()
+//----------------------------------------
+
 void dump_menuitem(struct MenuItem *menuitem)
 {
   Serial.printf(F("  menuitem address=%08x\n"), menuitem);
@@ -343,7 +365,10 @@ void dump_menuitem(struct MenuItem *menuitem)
   Serial.printf(F("  action=%08x\n"), menuitem->action);
 }
 
+//----------------------------------------
 // dump a Menu and contained MenuItems to the console
+//----------------------------------------
+
 void dump_menu(const char *msg, struct Menu *menu)
 {
   Serial.printf(F("----------------- Menu --------------------\n"));
@@ -360,7 +385,7 @@ void dump_menu(const char *msg, struct Menu *menu)
 }
 
 //----------------------------------------
-// Draw the menu on the screen.
+// Draw a menu on the screen.
 //     menu  pointer to a Menu structure
 // Only draws the top row.
 //----------------------------------------
@@ -377,6 +402,7 @@ void menu_draw(struct Menu *menu)
 // Draw a standard menuitem on the screen.
 //     menu      pointer to a Menu structure
 //     item_num  the item number to show
+// Custome menuitems are drawn by their handler.
 //----------------------------------------
 
 void menuitem_draw(struct Menu *menu, int item_num)
@@ -497,17 +523,27 @@ void display_flash(void)
 //##############################################################################
 // The system event queue.
 // Implemented as a circular buffer.
+// Since the RE code that pushes to the queue is event-driven, we must be
+// careful to disable/enable interrupts at the appropriate places.
 //##############################################################################
 
+// the queue itself
 VFOEvent event_queue[EventQueueLength];
-int queue_fore = 0;   // fore pointer into circular buffer
-int queue_aft = 0;    // aft pointer into circular buffer
+
+// queue pointers
+int queue_fore = 0;   // points at next event to be popped
+int queue_aft = 0;    // points at next free slot for a pushed event
+
+//----------------------------------------
+// Push an event onto the event queue.
+//     event  number of the event to push
+// If queue is full, abort()!
+//
+// This routine is called only from interrupt code, so needs no protection.
+//----------------------------------------
 
 void event_push(VFOEvent event)
 {
-  // Must protect from RE code fiddling with queue
-  noInterrupts();
-
   // put new event into next empty slot
   event_queue[queue_fore] = event;
 
@@ -516,15 +552,21 @@ void event_push(VFOEvent event)
   if (queue_fore >= EventQueueLength)
     queue_fore = 0;
 
+  interrupts();
+
   // if queue full, abort
   if (queue_aft == queue_fore)
   {
-      event_dump_queue("ERROR: event queue full:");
+      event_dump_queue("ERROR: event queue full!");
       abort("Event queue full");
   }
-
-  interrupts();
 }
+
+//----------------------------------------
+// Pop next event from the queue.
+//
+// Returns vfo_None if queue is empty.
+//----------------------------------------
 
 VFOEvent event_pop(void)
 {
@@ -533,20 +575,27 @@ VFOEvent event_pop(void)
 
   // if queue empty, return None event
   if (queue_fore == queue_aft)
+  {
+    interrupts();
     return vfo_None;
+  }
 
   // get next event
   VFOEvent event = event_queue[queue_aft];
 
   // move aft pointer up one slot, wrap if necessary
   ++queue_aft;
-  if (queue_aft  >= EventQueueLength)
+  if (queue_aft >= EventQueueLength)
     queue_aft = 0;
 
   interrupts();
 
   return event;
 }
+
+//----------------------------------------
+// Returns the number of events in the queue.
+//----------------------------------------
 
 int event_pending(void)
 {
@@ -565,6 +614,10 @@ int event_pending(void)
   return result;
 }
 
+//----------------------------------------
+// Clear out any events in the queue.
+//----------------------------------------
+
 void event_flush(void)
 {
   // Must protect from RE code fiddling with queue
@@ -575,6 +628,12 @@ void event_flush(void)
 
   interrupts();
 }
+
+//----------------------------------------
+// Dump the queue contents to the console.
+//     msg  address of message to show
+// Debug code.
+//----------------------------------------
 
 void event_dump_queue(const char *msg)
 {
@@ -603,8 +662,8 @@ void event_dump_queue(const char *msg)
 //##############################################################################
 
 //----------------------------------------
-// Display an unsigned long on the display with selected column underlined.
-//     value       the number to display
+// Display a value on the display with selected column underlined.
+//     value       the number to show
 //     sel_col     the selection offset of digit to underline
 //                 (0 is rightmost digit, increasing to the left)
 //     num_digits  the number of digits to show on the display
@@ -768,7 +827,9 @@ volatile byte bFlag = 0;
 
 //----------------------------------------
 // Initialize the rotary encoder stuff.
-// Return 'true' if button was pressed down during setup.
+//
+// Return 'true' if button was down during setup.
+// This is used to reset some VFO display values if necessary.
 //----------------------------------------
 
 bool re_setup(void)
@@ -794,8 +855,7 @@ bool re_setup(void)
 
 void pinPush_isr(void)
 {
-  noInterrupts();
-
+  // sample the pin value
   re_down = ! (PIND & 0x10);
   
   if (re_down)
@@ -816,7 +876,8 @@ void pinPush_isr(void)
       {
         // check to see if we have a single click very recently
         if (last_click != 0)
-        {   // did have single click before this
+        {
+          // yes, did have single click before this release
           unsigned long dclick_delta = last_up_time - last_click;
 
           // if short time since last click, issue double-click event
@@ -833,6 +894,7 @@ void pinPush_isr(void)
         }
         else
         {
+          // no, this is an isolated release
           event_push(vfo_Click);
           last_click = last_up_time;    // single-click, prepare for possible double
         }
@@ -843,8 +905,6 @@ void pinPush_isr(void)
       }
     }
   }
-
-  interrupts();
 }
 
 //----------------------------------------
@@ -853,11 +913,8 @@ void pinPush_isr(void)
 
 void pinA_isr(void)
 {
-  byte reading;
-
-  noInterrupts();
-
-  reading = PIND & 0xC;
+  // sample the pin state
+  byte reading = PIND & 0xC;
 
   if (reading == B00001100 && aFlag)
   { // check that we have both pins at detent (HIGH) and that we are expecting detent on
@@ -879,8 +936,6 @@ void pinA_isr(void)
     // show we're expecting pinB to signal the transition to detent from free rotation
     bFlag = 1;
   }
-
-  interrupts();
 }
 
 //----------------------------------------
@@ -889,11 +944,8 @@ void pinA_isr(void)
 
 void pinB_isr(void)
 {
-  byte reading;
-
-  noInterrupts();
-
-  reading = PIND & 0xC;
+  // sample the pin value
+  byte reading = PIND & 0xC;
 
   if (reading == B00001100 && bFlag)
   { // check that we have both pins at detent (HIGH) and that we are expecting detent on
@@ -915,8 +967,6 @@ void pinB_isr(void)
     // show we're expecting pinA to signal the transition to detent from free rotation
     aFlag = 1;
   }
-
-  interrupts();
 }
 
 
@@ -926,8 +976,8 @@ void pinB_isr(void)
 
 // Define the address in EEPROM of various things.
 // The "NEXT_FREE" value is the address of the next free slot address.
-// Ignore "redefine errors" - silly compiler!
-// The idea is that we are free to rearrange objects below with minimum fuss
+// Ignore "redefine errors" - not very helpful in this case!
+// The idea is that we are free to rearrange objects below with minimum fuss.
 
 // start storing at address 0
 #define NEXT_FREE   (0)
@@ -1084,7 +1134,7 @@ void dump_eeprom(void)
 //##############################################################################
 
 //----------------------------------------
-// Pulse 'pin' high and then low.
+// Pulse 'pin' high and then low very quickly.
 //----------------------------------------
 
 void dds_pulse_high(byte pin)
@@ -1107,7 +1157,8 @@ void dds_tfr_byte(byte data)
 }
 
 //----------------------------------------
-// frequency of sinewave (datasheet page 12) will be <sys clock> * <frequency tuning word> / 2^32
+// Frequency of sinewave (datasheet page 12) will be "<sys clock> * <frequency tuning word> / 2^32".
+// Rearranging: FTW = (frequency * 2^32) / sys_clock .
 //
 // 'VfoClockOffset' is the value the 'Calibrate' menu tweaks, initially 0.
 //----------------------------------------
@@ -1183,10 +1234,10 @@ void dds_setup(void)
 void setup(void)
 {
   // initialize the BlankRow global to a blank string length of a display row
-  BlankRow = (char *) malloc(NumCols + 1);     // size of one display row
+  BlankRow = (char *) malloc(NumCols + 1);
   for (int i = 0; i < NumCols; ++i)
     BlankRow[i] = ' ';
-  BlankRow[NumCols] = '\0';
+  BlankRow[NumCols] = '\0';     // don't forget the string terminator
 
   // initialize the serial console
   Serial.begin(115200);
@@ -1245,10 +1296,7 @@ void setup(void)
   // dump EEPROM values
   dump_eeprom();
 
-  // we sometimes see random events on powerup, flush them here
-//  event_flush();
-
-  // get going
+  // show the main screen and continue in loop()
   show_main_screen();
 }
 
@@ -1517,6 +1565,7 @@ void credits_action(struct Menu *menu, int item_num)
   show_credits();
   
   // handle events in our own little event loop
+  // we want to wait until some sort of click
   while (true)
   {
     // handle any pending event
@@ -1706,8 +1755,8 @@ void draw_row1_time(unsigned int msec, unsigned int def_time)
 // Set the current 'hold click' time and save to EEPROM if 'actioned'.
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
-// This works differently from brightness/contrast.  We show menuitems
-// of the time to use.
+// This works differently from brightness/contrast.
+// We show menuitems of the time to use.
 //----------------------------------------
 
 void holdclick_action(struct Menu *menu, int item_num)
@@ -1772,8 +1821,8 @@ void holdclick_action(struct Menu *menu, int item_num)
 // Set the current 'doubleclick' time and save to EEPROM if 'actioned'.
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
-// This works differently from brightness/contrast.  We show menuitems
-// of the time to use.
+// This works differently from brightness/contrast.
+// We show menuitems of the time to use.
 //----------------------------------------
 
 void doubleclick_action(struct Menu *menu, int item_num)
@@ -1838,11 +1887,11 @@ void doubleclick_action(struct Menu *menu, int item_num)
 // Adjust the DDS-60 clock tweak to allow frequency calibration.
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
-// Only works if the VFO is online.
+// If VFO is on standby, force it online, tweak, and then offline again.
 //
 // In line with all other action menuitems we want to observer the effects
 // of changing the value, but also only want to make a permanent change on
-// a 'click' action.
+// a 'click' action only.
 //----------------------------------------
 
 void calibrate_action(struct Menu *menu, int item_num)
@@ -1959,6 +2008,7 @@ void vfo_toggle_mode(void)
   lcd.write(BlankRow);
   lcd.setCursor(0, 1);
   lcd.write(mode2display(VfoMode));
+// FIXME: if we display something else on bottom row change this code!
 }
 
 //----------------------------------------
@@ -2003,12 +2053,6 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 
 void loop(void)
 {
-#ifdef JUNK
-  // remember old values, update screen if changed
-  Frequency old_freq = VfoFrequency;
-  int old_position = VfoSelectDigit;
-#endif
-
   // handle all events in the queue
   while (event_pending() > 0)
   {
