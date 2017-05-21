@@ -271,7 +271,12 @@ void show_credits(void)
 
 void banner(void)
 {
-  Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
+  Serial.printf(F("\n"));
+  Serial.printf(F("*************************************************\n"));
+  Serial.printf(F("*           %s %s%s (%s)          *\n"),
+                ProgramName, Version, MinorVersion, Callsign);
+  Serial.printf(F("*************************************************\n"));
+  Serial.printf(F("\n"));
 
   show_credits();
   delay(900);    // wait a bit
@@ -1609,10 +1614,15 @@ void draw_row1_bar(int length)
 // Set the current contrast and save to EEPROM if 'actioned'.
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
+// We show immediately what the changes mean, but only update the
+// actual brightness if we do a vfo_Click action.
 //----------------------------------------
 
 void brightness_action(struct Menu *menu, int item_num)
 {
+  // save original brightness in case we don't update
+  int old_brightness = LcdBrightness;
+  
   // convert brighness value to a display value in [1, 16]
   int index = (LcdBrightness + 1) / 16;
  
@@ -1645,10 +1655,12 @@ void brightness_action(struct Menu *menu, int item_num)
             index = 16;
           break;
         case vfo_Click:
+          old_brightness = LcdBrightness;
           save_to_eeprom();
           display_flash();
           break;
         case vfo_HoldClick:
+          LcdBrightness = old_brightness;
           event_flush();
           return;
         default:
@@ -1670,12 +1682,24 @@ void brightness_action(struct Menu *menu, int item_num)
 // Set the current contrast and save to EEPROM if 'actioned'.
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
+// We show immediately what the changes mean, but only update the
+// actual contrast if we do a vfo_Click action.
+//
+// We limit the allowed range for LcdContrast to [0, 128].
 //----------------------------------------
 
 void contrast_action(struct Menu *menu, int item_num)
 {
-  // convert contrast value to a display value in [1, 16]
-  int index = 16 - LcdContrast / 8;
+  // save old contrast just in case we don't set it here
+  int old_contrast = LcdContrast;
+  
+  // convert contrast value to a display value in [0, 16]
+  int index = LcdContrast / 8;
+
+  if (index > 16)   // ensure in range
+    index = 16;
+  if (index < 1)
+    index = 1;
  
   // get rid of any stray events to this point
   event_flush();
@@ -1685,7 +1709,8 @@ void contrast_action(struct Menu *menu, int item_num)
   lcd.print(menu->items[item_num]->title);
   
   // show row slot info on row 1
-  draw_row1_bar(index);
+  // Contrast voltage works opposite to brightness
+  draw_row1_bar(17 - index);
 
   // handle events in our own little event loop
   while (true)
@@ -1698,18 +1723,22 @@ void contrast_action(struct Menu *menu, int item_num)
       switch (event)
       {
         case vfo_RLeft:
-          if (--index < 1)
-            index = 1;
-          break;
-        case vfo_RRight:
           if (++index > 16)
             index = 16;
           break;
+        case vfo_RRight:
+          if (--index < 1)
+            index = 1;
+          break;
         case vfo_Click:
+          old_contrast = LcdContrast;  // for when we exit
           save_to_eeprom();
           display_flash();
           break;
         case vfo_HoldClick:
+          // not saving, restoe original contrast setting
+          LcdContrast = old_contrast;
+          analogWrite(mc_Contrast, LcdContrast);
           event_flush();
           return;
         default:
@@ -1718,11 +1747,12 @@ void contrast_action(struct Menu *menu, int item_num)
       }
 
       // adjust display contrast so we can see the results
-      LcdContrast = (16 - index) * 8;
+      LcdContrast = index * 8;
       analogWrite(mc_Contrast, LcdContrast);
 
       // show brightness value in row 1
-      draw_row1_bar(index);
+      // Contrast voltage works opposite to brightness
+      draw_row1_bar(17 - index);
     }
   }
 }
