@@ -837,6 +837,8 @@ volatile byte bFlag = 0;
 //
 // Return 'true' if button was down during setup.
 // This is used to reset some VFO display values if necessary.
+//
+// Note that the three RE inputs are inverted due to 74HC14 debounce
 //----------------------------------------
 
 bool re_setup(void)
@@ -852,18 +854,18 @@ bool re_setup(void)
   attachInterrupt(digitalPinToInterrupt(re_pinPush), pinPush_isr, CHANGE);
 
   // look at RE button, if DOWN this function returns 'true'
-  // FIXME - Worry about bounce?
-  return ! (PIND & 0x10);
+  return (PIND & 0x10);
 }
 
 //----------------------------------------
 // Handler for pusbutton interrupts (UP or DOWN).
+// Note: input signal has been inverted.
 //----------------------------------------
 
 void pinPush_isr(void)
 {
   // sample the pin value
-  re_down = ! (PIND & 0x10);
+  re_down = (PIND & 0x10);
   
   if (re_down)
   {
@@ -916,14 +918,15 @@ void pinPush_isr(void)
 
 //----------------------------------------
 // Handler for pinA interrupts.
+// Note: input signal has been inverted.
 //----------------------------------------
 
 void pinA_isr(void)
 {
-  // sample the pin state
-  byte reading = PIND & 0xC;
+  // sample the pin values for pin 0 to 7
+  byte reading = PIND & 0xC;  // mask pins of interest
 
-  if (reading == B00001100 && aFlag)
+  if ((reading == B00001100) && aFlag)
   { // check that we have both pins at detent (HIGH) and that we are expecting detent on
     // this pin's rising edge
     if (re_down)
@@ -947,14 +950,15 @@ void pinA_isr(void)
 
 //----------------------------------------
 // Handler for pinB interrupts.
+// Note: input signal has been inverted.
 //----------------------------------------
 
 void pinB_isr(void)
 {
-  // sample the pin value
-  byte reading = PIND & 0xC;
+  // sample the pin values for pin 0 to 7
+  byte reading = PIND & 0xC;  //  mask pins of interest
 
-  if (reading == B00001100 && bFlag)
+  if ((reading == B00001100) && bFlag)
   { // check that we have both pins at detent (HIGH) and that we are expecting detent on
     // this pin's rising edge
     if (re_down)
@@ -1164,7 +1168,12 @@ void dds_tfr_byte(byte data)
 }
 
 //----------------------------------------
-// Frequency of sinewave (datasheet page 12) will be "<sys clock> * <frequency tuning word> / 2^32".
+// Set the DDS-60 output frequency.
+//
+// Only set if VFO is online.
+//
+// Frequency of sinewave (datasheet page 12) will be
+// "<sys clock> * <frequency tuning word> / 2^32".
 // Rearranging: FTW = (frequency * 2^32) / sys_clock .
 //
 // 'VfoClockOffset' is the value the 'Calibrate' menu tweaks, initially 0.
@@ -1172,6 +1181,10 @@ void dds_tfr_byte(byte data)
 
 void dds_update(Frequency frequency)
 {
+  // if not online, do nothing
+  if (VfoMode != vfo_Online)
+    return;
+    
   // as in datasheet page 12 - modified to include calibration offset
   unsigned long data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
 
@@ -2022,6 +2035,10 @@ void calibrate_action(struct Menu *menu, int item_num)
 
 //----------------------------------------
 // Toggle the VFO mode: vfo_Online or vfo_Standby.
+//
+// Note that DDS-60 only updates if VfoMode is vfo_Online.
+// So we must be sure to set mode to vfo_Standby after dds_standby()
+// and set mode to vfo_Online before dds_online().
 //----------------------------------------
 void vfo_toggle_mode(void)
 {
@@ -2034,8 +2051,8 @@ void vfo_toggle_mode(void)
   else
   {
     // DDS goes online, change mode
-    dds_online();
     VfoMode = vfo_Online;
+    dds_online();
   }
 
   // clear row 1 and write new mode string
