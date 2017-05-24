@@ -853,8 +853,8 @@ bool re_setup(void)
   attachInterrupt(digitalPinToInterrupt(re_pinB), pinB_isr, RISING);
   attachInterrupt(digitalPinToInterrupt(re_pinPush), pinPush_isr, CHANGE);
 
-  // look at RE button, if DOWN this function returns 'true'
-  return (PIND & 0x10);
+  // look at RE push button, if DOWN this function returns 'true'
+  return PIND & 0x10;
 }
 
 //----------------------------------------
@@ -1308,6 +1308,12 @@ void setup(void)
     lcd.print("DigitalVFO reset");
     lcd.setCursor(0, 1);
     lcd.print(" nothing saved");
+
+    // wait until button NOT down
+    while (PIND & 0x10)
+      ;
+
+    // after a small delay, continue
     delay(2000);
     lcd.clear();
     delay(1000);
@@ -1321,6 +1327,9 @@ void setup(void)
 
   // show the main screen and continue in loop()
   show_main_screen();
+
+  // eat any events that may have been generated
+  event_flush();
 }
 
 //----------------------------------------
