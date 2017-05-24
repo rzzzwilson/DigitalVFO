@@ -2098,13 +2098,21 @@ struct Menu settings_menu = {"Settings", ALEN(mia_settings), mia_settings};
 // Main menu
 //----------------------------------------
 
-struct MenuItem mi_save = {"Save slot", NULL, &saveslot_action};
-struct MenuItem mi_restore = {"Restore slot", NULL, &restoreslot_action};
-struct MenuItem mi_del = {"Delete slot", NULL, &deleteslot_action};
+struct MenuItem mi_saveslot = {"Save slot", NULL, &saveslot_action};
+struct MenuItem mi_restoreslot = {"Restore slot", NULL, &restoreslot_action};
+struct MenuItem mi_deleteslot = {"Delete slot", NULL, &deleteslot_action};
+struct MenuItem *mia_slots[] = {&mi_saveslot, &mi_restoreslot, &mi_deleteslot};
+struct Menu slots_menu = {"Slots", ALEN(mia_slots), mia_slots};
+
+//----------------------------------------
+// Main menu
+//----------------------------------------
+
+struct MenuItem mi_slots = {"Slots", &slots_menu, NULL};
 struct MenuItem mi_settings = {"Settings", &settings_menu, NULL};
 struct MenuItem mi_reset = {"Reset all", &reset_menu, NULL};
 struct MenuItem mi_credits = {"Credits", NULL, &credits_action};
-struct MenuItem *mia_main[] = {&mi_save, &mi_restore, &mi_del, &mi_settings, &mi_reset, &mi_credits};
+struct MenuItem *mia_main[] = {&mi_slots, &mi_settings, &mi_reset, &mi_credits};
 struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 
 
