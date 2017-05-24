@@ -4,7 +4,9 @@ Digital VFO
 Status
 ======
 
-The basic VFO is working.  Almost complete - on the breadboard!
+The basic VFO is working.  Almost complete - on the breadboard!  No software
+changes recently as making sure the hardware is solid before putting it
+into a case.
 
 Completed:
 
