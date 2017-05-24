@@ -18,10 +18,14 @@ The main hardware components for the VFO are:
 Operation
 ---------
 
-The VFO frequency will be changed by turning the rotary encoder knob to the
-left or the right.  This will decrease and increase respectively the frequency
-digit under the cursor.  Any overflow or underflow of the selected digit will
-propagate to the left only.
+The VFO has two modes: 'ONLINE' and 'standby'.
+
+The displayed frequency will be changed by turning the rotary encoder knob to
+the left or the right.  This will decrease and increase respectively the
+frequency digit under the cursor.  Any overflow or underflow of the selected
+digit will propagate to the left only.  Note that even though the displayed
+frequency may change, the DDS frequency will change only if the VFO is
+ONLINE.
 
 The selection cursor will be moved left or right by pressing in and
 holding the rotary encoder knob and rotating the knob to the left or right
@@ -31,7 +35,7 @@ The menu will be shown after the rotary encoder knob is held down for a
 configurable time without rotation.  When the knob is released the menu will
 be shown.  Rotating the knob left and right will navigate through menu choices.
 
-To select a menu item press the rotary encoder knob in for a short press.
+To action a menu item press the rotary encoder knob in for a short press.
 
 To go back one menu level just perform a long press.
 
