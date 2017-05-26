@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 // A digital VFO using the DDS-60 card.
 //
-// The VFO will generate signals in the range 1.000000MHz to 30.000000MHz
+// The VFO will generate signals in the range 1.000000MHz to 60.000000MHz
 // with a step ranging down to 1Hz.
 //
 // The interface will be a single rotary encoder with a built-in pushbutton.
@@ -24,6 +24,13 @@ const char *Callsign = "vk4fawr";
 // display constants - below is for ubiquitous small HD44780 16x2 display
 const int NumRows = 2;
 const int NumCols = 16;
+
+//-----
+// Some convenience typedefs
+//-----
+
+typedef unsigned long ULONG;
+typedef unsigned int UINT;
 
 //-----
 // Pins used by microcontroller to control devices.
@@ -59,8 +66,8 @@ const byte DDS_DATA = 16;     // connected to AD9851 D7 (serial data) pin
 //-----
 
 // max and min frequency showable
-const unsigned long MaxFreq = 30000000L;
-const unsigned long MinFreq = 1000000L;
+const ULONG MaxFreq = 60000000L;
+const ULONG MinFreq = 1000000L;
 
 // number of digits in the frequency display
 const int NumFreqChars = 8;
@@ -93,22 +100,22 @@ const int SpaceIndex = 10;
 byte in_use_char[8] = {0x10,0x18,0x1c,0x1e,0x1c,0x18,0x10,0x00};
 
 // map select_offset to bump values
-unsigned long offset2bump[] = {1,           // offset = 0
-                               10,          // 1
-                               100,         // 2
-                               1000,        // 3
-                               10000,       // 4
-                               100000,      // 5
-                               1000000,     // 6
-                               10000000,    // 7
-                               100000000};  // 8
+ULONG offset2bump[] = {1,           // offset = 0
+                       10,          // 1
+                       100,         // 2
+                       1000,        // 3
+                       10000,       // 4
+                       100000,      // 5
+                       1000000,     // 6
+                       10000000,    // 7
+                       100000000};  // 8
 
 // string holding one entire blank row (allocated in setup())
 char *BlankRow = NULL;
 
 // default LCD contrast & brightness
-const unsigned int DefaultLcdContrast = 70;
-const unsigned int DefaultLcdBrightness = 150;
+const UINT DefaultLcdContrast = 70;
+const UINT DefaultLcdBrightness = 150;
 
 //-----
 // Events and the event queue.
@@ -163,7 +170,7 @@ const int MaxOffsetDigits = 5;
 
 enum Mode VfoMode;          // VFO mode
 
-typedef unsigned long Frequency;
+typedef ULONG Frequency;
 Frequency VfoFrequency;     // VFO frequency (Hz)
 
 typedef int SelOffset;
@@ -307,7 +314,7 @@ void banner(void)
 // The resultant buffer does NOT have a terminating '\0'!
 //----------------------------------------
 
-void ulong2buff(char *buf, int bufsize, unsigned long value)
+void ulong2buff(char *buf, int bufsize, ULONG value)
 {
   char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
 
@@ -559,8 +566,6 @@ void event_push(VFOEvent event)
   if (queue_fore >= EventQueueLength)
     queue_fore = 0;
 
-  interrupts();
-
   // if queue full, abort
   if (queue_aft == queue_fore)
   {
@@ -653,10 +658,13 @@ void event_dump_queue(const char *msg)
   {
     VFOEvent event = event_queue[i];
 
-    Serial.printf(F("  %d -> %s\n"), event, event2display(event));
+    Serial.printf(F("  %d -> %s\n"), i, event2display(event));
   }
-  Serial.printf(F("Queue length=%d\n"), event_pending());
-  Serial.printf(F("queue_aft=%d\n"), queue_aft);
+  if (event_pending() == 0)
+    Serial.printf(F("Queue length=0 (or %d)\n"), EventQueueLength);
+  else
+    Serial.printf(F("Queue length=%d\n"), event_pending());
+  Serial.printf(F("queue_aft=%d"), queue_aft);
   Serial.printf(F(", queue_fore=%d\n"), queue_fore);
   Serial.printf(F("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"));
 
@@ -678,7 +686,7 @@ void event_dump_queue(const char *msg)
 // If the value is too long it will be truncated at the left.
 //----------------------------------------
 
-void display_sel_value(unsigned long value, int sel_col, int num_digits, int col, int row)
+void display_sel_value(ULONG value, int sel_col, int num_digits, int col, int row)
 {
   char buf [num_digits];
   int index = num_digits - sel_col - 1;
@@ -818,13 +826,13 @@ const int MaxDClickTime = 1000;       // max configurable time
 const int DefaultDClickTime = 300;    // default time
 
 // internal variables
-unsigned int ReHoldClickTime = DefaultHoldClickTime;
-unsigned int ReDClickTime = DefaultDClickTime;
+UINT ReHoldClickTime = DefaultHoldClickTime;
+UINT ReDClickTime = DefaultDClickTime;
 
-bool re_rotation = false;       // true if rotation occurred while knob down
-bool re_down = false;           // true while knob is down
-unsigned long re_down_time = 0; // milliseconds when knob is pressed down
-unsigned long last_click = 0;   // time when last single click was found
+bool re_rotation = false;     // true if rotation occurred while knob down
+bool re_down = false;         // true while knob is down
+ULONG re_down_time = 0;       // milliseconds when knob is pressed down
+ULONG last_click = 0;         // time when last single click was found
 
 // expecting rising edge on pinA - at detent
 volatile byte aFlag = 0;
@@ -838,7 +846,7 @@ volatile byte bFlag = 0;
 // Return 'true' if button was down during setup.
 // This is used to reset some VFO display values if necessary.
 //
-// Note that the three RE inputs are inverted due to 74HC14 debounce
+// Note that the three RE inputs are inverted due to 74HC14 debounce.
 //----------------------------------------
 
 bool re_setup(void)
@@ -878,8 +886,8 @@ void pinPush_isr(void)
     // button released, check if rotation, UP event if not
     if (! re_rotation)
     {
-      unsigned long last_up_time = millis();
-      unsigned int push_time = last_up_time - re_down_time;
+      ULONG last_up_time = millis();
+      UINT push_time = last_up_time - re_down_time;
 
       if (push_time < ReHoldClickTime)
       {
@@ -887,7 +895,7 @@ void pinPush_isr(void)
         if (last_click != 0)
         {
           // yes, did have single click before this release
-          unsigned long dclick_delta = last_up_time - last_click;
+          ULONG dclick_delta = last_up_time - last_click;
 
           // if short time since last click, issue double-click event
           if (dclick_delta <= ReDClickTime)
@@ -1106,8 +1114,8 @@ void dump_eeprom(void)
   int clkoffset;
   int brightness;
   int contrast;
-  unsigned int hold;
-  unsigned int dclick;
+  UINT hold;
+  UINT dclick;
 
   EEPROM.get(AddressFreq, freq);
   EEPROM.get(AddressSelDigit, offset);
@@ -1174,9 +1182,8 @@ void dds_tfr_byte(byte data)
 //
 // Frequency of sinewave (datasheet page 12) will be
 // "<sys clock> * <frequency tuning word> / 2^32".
-// Rearranging: FTW = (frequency * 2^32) / sys_clock .
-//
-// 'VfoClockOffset' is the value the 'Calibrate' menu tweaks, initially 0.
+// Rearranging: FTW = (frequency * 2^32) / sys_clock.
+// The 'VfoClockOffset' value is subtracted from <sys_clock> below.
 //----------------------------------------
 
 void dds_update(Frequency frequency)
@@ -1186,7 +1193,7 @@ void dds_update(Frequency frequency)
     return;
     
   // as in datasheet page 12 - modified to include calibration offset
-  unsigned long data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
+  ULONG data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
 
   Serial.printf(F("dds_update: frequency=%ld, VfoClockOffset=%d, data=%ld\n"),
                 frequency, VfoClockOffset, data);
@@ -1276,8 +1283,8 @@ void setup(void)
 
   // initialize the display
   lcd.begin(NumCols, NumRows);      // define display size
-  lcd.clear();
   lcd.noCursor();
+  lcd.clear();
 
   // create underlined space for frequency display
   lcd.createChar(SpaceChar, sel_digits[SpaceIndex]);
@@ -1301,22 +1308,23 @@ void setup(void)
 
     Serial.printf(F("Resetting brightness to %d, contrast to %d and hold time to %d\n"),
                   LcdBrightness, LcdContrast, ReHoldClickTime);
+    Serial.printf(F("Click the RE button to continue...\n"));
 
     // show user we were reset
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("DigitalVFO reset");
     lcd.setCursor(0, 1);
-    lcd.print(" nothing saved");
+    lcd.print("Click to proceed");
 
-    // wait until button NOT down
-    while (PIND & 0x10)
+    // flush any events in the queue, then wait for vfo_Click
+    event_flush();
+    while (event_pop() != vfo_Click)
       ;
-
-    // after a small delay, continue
-    delay(2000);
+ 
+    // clear screen and continue
     lcd.clear();
-    delay(1000);
+    delay(500);
   }
   
   // show program name and version number
@@ -1325,11 +1333,11 @@ void setup(void)
   // dump EEPROM values
   dump_eeprom();
 
-  // show the main screen and continue in loop()
-  show_main_screen();
-
   // eat any events that may have been generated
   event_flush();
+
+  // show the main screen and continue in loop()
+  show_main_screen();
 }
 
 //----------------------------------------
@@ -1600,25 +1608,11 @@ void credits_action(struct Menu *menu, int item_num)
   // we want to wait until some sort of click
   while (true)
   {
-    // handle any pending event
-    if (event_pending() > 0)
+    // handle any pending event, ignore all but hold-click
+    if (event_pop() == vfo_HoldClick)
     {
-      byte event = event_pop(); // get next event and handle it
-
-      switch (event)
-      {
-        case vfo_RLeft:
-          break;
-        case vfo_RRight:
-          break;
-        case vfo_Click:
-          return;
-        case vfo_HoldClick:
-          return;
-        default:
-          // ignored events we don't handle
-          break;
-      }
+      event_flush();
+      return;
     }
   }
 }
@@ -1651,7 +1645,7 @@ void brightness_action(struct Menu *menu, int item_num)
   int old_brightness = LcdBrightness;
   
   // convert brighness value to a display value in [1, 16]
-  int index = (LcdBrightness + 1) / 16;
+  int index = (LcdBrightness + 16) / 16;
  
   // get rid of any stray events to this point
   event_flush();
@@ -1696,7 +1690,7 @@ void brightness_action(struct Menu *menu, int item_num)
       }
 
       // adjust display brightness so we can see the results
-      LcdBrightness = (index * 16) - 1;
+      LcdBrightness = (index * 16) - 16;
       analogWrite(mc_Brightness, LcdBrightness);
 
       // show brightness value in row 1
@@ -1790,7 +1784,7 @@ void contrast_action(struct Menu *menu, int item_num)
 //     def_time  the current system time
 //----------------------------------------
 
-void draw_row1_time(unsigned int msec, unsigned int def_time)
+void draw_row1_time(UINT msec, UINT def_time)
 {
   lcd.setCursor(0, 1);
   lcd.print(BlankRow);
@@ -1820,8 +1814,8 @@ void holdclick_action(struct Menu *menu, int item_num)
 {
   Serial.printf(F("holdclick_action: entered\n"));
 
-  unsigned int holdtime = ReHoldClickTime;      // the value we change
-  const unsigned int hold_step = 100;           // step adjustment +/-
+  UINT holdtime = ReHoldClickTime;      // the value we change
+  const UINT hold_step = 100;           // step adjustment +/-
   
   // get rid of any stray events to this point
   event_flush();
@@ -1886,8 +1880,8 @@ void doubleclick_action(struct Menu *menu, int item_num)
 {
   Serial.printf(F("doubleclick_action: entered, ReDClickTime=%dmsec\n"), ReDClickTime);
 
-  int dctime = ReDClickTime;        // the value we adjust
-  unsigned int dclick_step = 100;   // step adjustment +/-
+  int dctime = ReDClickTime;      // the value we adjust
+  UINT dclick_step = 100;         // step adjustment +/-
   
   // get rid of any stray events to this point
   event_flush();
