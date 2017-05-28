@@ -1278,8 +1278,12 @@ void setup(void)
 
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
+  LcdContrast = 0;
+  LcdBrightness = 50;
   analogWrite(mc_Brightness, LcdBrightness);
+  Serial.printf(F("Set brightness to %d\n"), LcdBrightness);
   analogWrite(mc_Contrast, LcdContrast);
+  Serial.printf(F("Set contrast to %d\n"), LcdContrast);
 
   // initialize the display
   lcd.begin(NumCols, NumRows);      // define display size
@@ -1757,7 +1761,7 @@ void contrast_action(struct Menu *menu, int item_num)
           display_flash();
           break;
         case vfo_HoldClick:
-          // not saving, restoe original contrast setting
+          // not saving, restore original contrast setting
           LcdContrast = old_contrast;
           analogWrite(mc_Contrast, LcdContrast);
           event_flush();
