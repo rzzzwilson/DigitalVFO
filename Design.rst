@@ -153,3 +153,16 @@ There will be a menu system that will allow the user to:
 * Calibrate the VFO oscillator.
 * Etc.
 
+The menu system will have this structure::
+
+    Menu      Slots     Save slot
+                        Restore slot
+                        Delete Slot
+              Settings  Brightness
+                        Contrast
+                        Hold click
+                        Double click
+                        Calibrate
+              Reset all No
+                        Yes
+              Credits
