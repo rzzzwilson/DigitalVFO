@@ -4,9 +4,11 @@ Digital VFO
 Status
 ======
 
-The basic VFO is working.  Almost complete - on the breadboard!  No software
-changes recently as making sure the hardware is solid before putting it
-into a case.
+The VFO hardware is complete.  Everything is inside a small metal case.  Perhaps
+too small a metal case as running at 12v the thing overheats and becomes
+unreliable.  It seems OK at 9v.  I also didn't think about accessing the Teensy
+USB port when the case is closed, so I can't tweak the software without cracking
+the case, which I can't do often as the wiring inside is fragile.
 
 Completed:
 
@@ -22,12 +24,21 @@ Completed:
 * add code to toggle standby/ON mode (from vfo_DClick)
 * add in the DDS-60 control code
 * add a "Calibrate" setting to adjust the divider value in the DDS-60 code
-  
-To be done:
-
 * test the thing fully!
-* think about making a circuit board for it (using Fritzing and cheap Chinese PCB maker?)
 * make up a metal case and rebuild into it
+
+Perhaps:
+
+* make another case with USB access
+* think about making a circuit board for it (Fritzing, cheap Chinese PCB maker?)
+
+Ongoing:
+
+* look for bugs in the software
+* maybe add a "sweep" function to the code (from, to, step, pause)
+* split out the Arduino code samples showing RE handling and menu system
+* think about hardware assembly methods to make DigitalVFO version 2!
+
 
 About
 =====
