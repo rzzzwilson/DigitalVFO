@@ -872,6 +872,7 @@ bool re_setup(void)
 
 void pinPush_isr(void)
 {
+  Serial.printf(F("pinPush_isr\n"));
   // sample the pin value
   re_down = (PIND & 0x10);
   
@@ -931,6 +932,7 @@ void pinPush_isr(void)
 
 void pinA_isr(void)
 {
+  Serial.printf(F("pinA_isr\n"));
   // sample the pin values for pin 0 to 7
   byte reading = PIND & 0xC;  // mask pins of interest
 
@@ -963,6 +965,7 @@ void pinA_isr(void)
 
 void pinB_isr(void)
 {
+  Serial.printf(F("pinB_isr\n"));
   // sample the pin values for pin 0 to 7
   byte reading = PIND & 0xC;  //  mask pins of interest
 
@@ -1278,8 +1281,6 @@ void setup(void)
 
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
-  LcdContrast = 0;
-  LcdBrightness = 50;
   analogWrite(mc_Brightness, LcdBrightness);
   Serial.printf(F("Set brightness to %d\n"), LcdBrightness);
   analogWrite(mc_Contrast, LcdContrast);
