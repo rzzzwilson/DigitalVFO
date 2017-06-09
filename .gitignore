@@ -1,3 +1,7 @@
+# local stuff
+*.mp4
+.DS_Store
+
 # Object files
 *.o
 *.ko
