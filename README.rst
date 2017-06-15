@@ -71,6 +71,14 @@ I got a couple of generic 16x2 displays from
 I got the rotary encoder from
 `the same place <https://www.aliexpress.com/wholesale?catId=0&initiative_id=AS_20170504210300&SearchText=rotary+encoder+switch>`_.
 
+Schematic
+=========
+
+The code runs on this hardware arrangement:
+
+.. image:: DigitalVFO.png
+
+
 Interface
 =========
 
