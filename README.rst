@@ -4,6 +4,39 @@ Digital VFO
 Status
 ======
 
+Version 1.0 is tagged and released!
+
+This is the original version that was squeezed into a small metal case.
+There were a few problems with this:
+
+* the setup got hot running at 12v and still too warm on 9v
+* there was no way to program in-case
+* the internal packaging was too error-prone, breaking wires, etc
+
+So there will be version 1.1 to address these issues, plus maybe convert the
+PWM control of the contrast to a straight analog voltage method.
+
+This new version is v1.1.
+
+Version 1.1
+-----------
+
+Need to:
+
+* convert contrast control to analog digital
+* new case allows in-case programming
+* new case has ventilation (passive at first)
+* better packaging (printed circuit board)
+
+And, of course:
+
+* allow control over USB
+* maybe add a "sweep" function to the code (from, to, step, pause)
+* look for bugs in the software
+
+Version 1.0
+-----------
+
 The VFO hardware is complete.  Everything is inside a small metal case.  Perhaps
 too small a metal case as running at 12v the thing overheats and becomes
 unreliable.  It seems OK at 9v.  I also didn't think about accessing the Teensy
