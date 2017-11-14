@@ -810,7 +810,8 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
 
 //##############################################################################
 // Interrupt driven rotary encoder interface.
-// from code by Simon Merrett, based on insight from Oleg Mazurov, Nick Gammon, rt, Steve Spence
+// from code by Simon Merrett, based on insight from Oleg Mazurov, Nick Gammon,
+// rt, Steve Spence
 //##############################################################################
 
 // time when click becomes a "hold click" (milliseconds)
