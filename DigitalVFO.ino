@@ -17,8 +17,8 @@
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
-const char *Version = "1.0";
-const char *MinorVersion = ".1";
+const char *Version = "1.1";
+const char *MinorVersion = ".0";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -366,6 +366,7 @@ struct Menu
   struct MenuItem **items;    // array of pointers to MenuItem data
 };
 
+#ifdef DEBUG
 //----------------------------------------
 // dump a MenuItem to the console
 // only called from dump_menu()
@@ -397,6 +398,7 @@ void dump_menu(const char *msg, struct Menu *menu)
     
   Serial.printf(F("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"));
 }
+#endif
 
 //----------------------------------------
 // Draw a menu on the screen.
@@ -873,7 +875,6 @@ bool re_setup(void)
 
 void pinPush_isr(void)
 {
-  Serial.printf(F("pinPush_isr\n"));
   // sample the pin value
   re_down = (PIND & 0x10);
   
@@ -933,7 +934,6 @@ void pinPush_isr(void)
 
 void pinA_isr(void)
 {
-  Serial.printf(F("pinA_isr\n"));
   // sample the pin values for pin 0 to 7
   byte reading = PIND & 0xC;  // mask pins of interest
 
@@ -966,7 +966,6 @@ void pinA_isr(void)
 
 void pinB_isr(void)
 {
-  Serial.printf(F("pinB_isr\n"));
   // sample the pin values for pin 0 to 7
   byte reading = PIND & 0xC;  //  mask pins of interest
 
@@ -1199,8 +1198,10 @@ void dds_update(Frequency frequency)
   // as in datasheet page 12 - modified to include calibration offset
   ULONG data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
 
+#ifdef DEBUG
   Serial.printf(F("dds_update: frequency=%ld, VfoClockOffset=%d, data=%ld\n"),
                 frequency, VfoClockOffset, data);
+#endif
 
   // start programming the DDS-60
   for (int b = 0; b < 4; ++b, data >>= 8)
@@ -1283,9 +1284,7 @@ void setup(void)
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
   analogWrite(mc_Brightness, LcdBrightness);
-  Serial.printf(F("Set brightness to %d\n"), LcdBrightness);
   analogWrite(mc_Contrast, LcdContrast);
-  Serial.printf(F("Set contrast to %d\n"), LcdContrast);
 
   // initialize the display
   lcd.begin(NumCols, NumRows);      // define display size
@@ -1337,7 +1336,9 @@ void setup(void)
   banner();
 
   // dump EEPROM values
+#ifdef DEBUG
   dump_eeprom();
+#endif
 
   // eat any events that may have been generated
   event_flush();
@@ -2131,7 +2132,6 @@ void loop(void)
     switch (event)
     {
       case vfo_RLeft:
-        Serial.printf(F("loop: vfo_RLeft\n"));
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MinFreq)
           VfoFrequency = MinFreq;
@@ -2139,7 +2139,6 @@ void loop(void)
           VfoFrequency = MaxFreq;
        break;
       case vfo_RRight:
-        Serial.printf(F("loop: vfo_RRight\n"));
         VfoFrequency += offset2bump[VfoSelectDigit];
         if (VfoFrequency < MinFreq)
           VfoFrequency = MinFreq;
@@ -2147,32 +2146,27 @@ void loop(void)
           VfoFrequency = MaxFreq;
         break;
       case vfo_DnRLeft:
-        Serial.printf(F("loop: vfo_DnRLeft\n"));
         VfoSelectDigit += 1;        
         if (VfoSelectDigit >= NumFreqChars)
           VfoSelectDigit = NumFreqChars - 1;
         break;
       case vfo_DnRRight:
-        Serial.printf(F("loop: vfo_DnRRight\n"));
         VfoSelectDigit -= 1;
         if (VfoSelectDigit < 0)
           VfoSelectDigit = 0;
         break;
       case vfo_Click:
-        Serial.printf(F("loop: vfo_Click event ignored\n"));
         break;
       case vfo_HoldClick:
-        Serial.printf(F("loop: Got vfo_HoldClick: calling menu_show()\n"));
         menu_show(&menu_main, 0);    // redisplay the original menu
         show_main_screen();
         save_to_eeprom();            // save any changes made in menu
         break;
       case vfo_DClick:
-        Serial.printf(F("loop: Got vfo_DClick\n"));
         vfo_toggle_mode();
         break;
       default:
-        Serial.printf(F("loop: Unrecognized event: %d\n"), event);
+        // unrecognized event, ignore
         break;
     }
 
