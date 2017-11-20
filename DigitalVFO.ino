@@ -1721,13 +1721,13 @@ void contrast_action(struct Menu *menu, int item_num)
   // save old contrast just in case we don't set it here
   int old_contrast = LcdContrast;
   
-  // convert contrast value to a display value in [0, 16]
-  int index = LcdContrast / 8;
+  // convert contrast value to a display value in [0, 15]
+  int index = LcdContrast / 3;
 
-  if (index > 16)   // ensure in range
-    index = 16;
-  if (index < 1)
-    index = 1;
+  if (index > 15)   // ensure in range
+    index = 15;
+  if (index < 0)
+    index = 0;
  
   // get rid of any stray events to this point
   event_flush();
@@ -1738,7 +1738,7 @@ void contrast_action(struct Menu *menu, int item_num)
   
   // show row slot info on row 1
   // Contrast voltage works opposite to brightness
-  draw_row1_bar(17 - index);
+  draw_row1_bar(16 - index);
 
   // handle events in our own little event loop
   while (true)
@@ -1751,12 +1751,12 @@ void contrast_action(struct Menu *menu, int item_num)
       switch (event)
       {
         case vfo_RLeft:
-          if (++index > 16)
-            index = 16;
+          if (++index > 15)
+            index = 15;
           break;
         case vfo_RRight:
-          if (--index < 1)
-            index = 1;
+          if (--index < 0)
+            index = 0;
           break;
         case vfo_Click:
           old_contrast = LcdContrast;  // for when we exit
@@ -1775,12 +1775,12 @@ void contrast_action(struct Menu *menu, int item_num)
       }
 
       // adjust display contrast so we can see the results
-      LcdContrast = index * 8;
+      LcdContrast = index * 3;
       analogWrite(mc_Contrast, LcdContrast);
 
       // show brightness value in row 1
       // Contrast voltage works opposite to brightness
-      draw_row1_bar(17 - index);
+      draw_row1_bar(16 - index);
     }
   }
 }
