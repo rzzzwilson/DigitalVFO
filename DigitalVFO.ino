@@ -114,7 +114,7 @@ ULONG offset2bump[] = {1,           // offset = 0
 char *BlankRow = NULL;
 
 // default LCD contrast & brightness
-const UINT DefaultLcdContrast = 70;
+const UINT DefaultLcdContrast = 0;
 const UINT DefaultLcdBrightness = 150;
 
 //-----
@@ -1722,7 +1722,7 @@ void contrast_action(struct Menu *menu, int item_num)
   int old_contrast = LcdContrast;
   
   // convert contrast value to a display value in [0, 15]
-  int index = LcdContrast / 3;
+  int index = LcdContrast / 8;
 
   if (index > 15)   // ensure in range
     index = 15;
@@ -1775,7 +1775,7 @@ void contrast_action(struct Menu *menu, int item_num)
       }
 
       // adjust display contrast so we can see the results
-      LcdContrast = index * 3;
+      LcdContrast = index * 8;
       analogWrite(mc_Contrast, LcdContrast);
 
       // show brightness value in row 1
