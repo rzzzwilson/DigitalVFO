@@ -12,6 +12,7 @@ There were a few problems with this:
 * the setup got hot running at 12v and still too warm on 9v
 * there was no way to program in-case
 * the internal packaging was too error-prone, breaking wires, etc
+* the contrast control was too "one-sided"
 
 So there will be version 1.1 to address these issues, plus maybe convert the
 PWM control of the contrast to a straight analog voltage method.
@@ -23,16 +24,35 @@ Version 1.1
 
 Need to:
 
-* convert contrast control to analog digital
 * new case allows in-case programming
 * new case has ventilation (passive at first)
 * better packaging (printed circuit board)
+* better, more linear, contrast control
 
 And, of course:
 
 * allow control over USB
-* maybe add a "sweep" function to the code (from, to, step, pause)
+* maybe add a "sweep" function to the in-case code (from, to, step, pause)
 * look for bugs in the software
+
+With PC control we can measure things with a "sweep" function.  Allow the PC to
+control the VFO frequency and the PC can sweep the frequency to whatever limits
+required.  At the same time, measure voltage/current/whatever from other Teensy
+instruments.  This means we could build:
+
+* an antenna analyzer
+* measure filter response curves
+* etc
+
+This version will use a printed circuit board to address the general
+unreliability of the 1.0 version.  The LCD will plug into the back of the main
+PCB and the DDS-60 will plug into the front.  The rotary encoder will have a
+cable with header that will plug into the front of the PCB.
+
+The files **DigitalVFO_1.1_SCH.pdf** and **DigitalVFO_1.1_PCB.pdf** are
+the circuit schematic and PCB layout, respectively.  Using ExpressPCB for
+this build.  The PCB layout will progress through a "standard" through-hole
+layout to a K7QO-style "muppet" layout.
 
 Version 1.0
 -----------
