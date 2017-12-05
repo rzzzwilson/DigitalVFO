@@ -14,10 +14,7 @@ There were a few problems with this:
 * the internal packaging was too error-prone, breaking wires, etc
 * the contrast control was too "one-sided"
 
-So there will be version 1.1 to address these issues, plus maybe convert the
-PWM control of the contrast to a straight analog voltage method.
-
-This new version is v1.1.
+So there will be version 1.1 to address these issues.
 
 Version 1.1
 -----------
