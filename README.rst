@@ -44,12 +44,10 @@ instruments.  This means we could build:
 This version will use a printed circuit board to address the general
 unreliability of the 1.0 version.  The LCD will plug into the back of the main
 PCB and the DDS-60 will plug into the front.  The rotary encoder will have a
-cable with header that will plug into the front of the PCB.
+cable with header that will plug into the PCB.
 
-The files **DigitalVFO_1.1_SCH.pdf** and **DigitalVFO_1.1_PCB.pdf** are
-the circuit schematic and PCB layout, respectively.  Using ExpressPCB for
-this build.  The PCB layout will progress through a "standard" through-hole
-layout to a K7QO-style "muppet" layout.
+The file **DigitalVFO_Schematic.pdf** is the schematic of the circuit.  The
+directory **kicad/DigitalVFO/Gerbers** holds the output files produced by KiCad.
 
 Version 1.0
 -----------
