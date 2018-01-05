@@ -48,6 +48,7 @@ cable with header that will plug into the PCB.
 
 The file **DigitalVFO_Schematic.pdf** is the schematic of the circuit.  The
 directory **kicad/DigitalVFO/Gerbers** holds the output files produced by KiCad.
+These files were sent to a Chinese PCB fab factory.
 
 Version 1.0
 -----------
