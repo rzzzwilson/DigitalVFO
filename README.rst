@@ -48,9 +48,9 @@ cable with header that will plug into the PCB.
 
 The file **DigitalVFO_Schematic_1.1.pdf** is the schematic of the circuit.  The
 directory **kicad/DigitalVFO/Gerbers** holds the output files produced by KiCad.
-These files were sent to a Chinese PCB fab factory.
+The Gerber files were sent to a Chinese PCB fab factory.
 
-The PCB has now returned from China, and it does look good!  Better yet,
+The PCB has now returned from China, and it does look good.  Better yet,
 assembling the board and testing it shows the thing WORKS!  I had to change the
 code to match changes I made while setting out the PCB, BUT IT WORKS!!
 
