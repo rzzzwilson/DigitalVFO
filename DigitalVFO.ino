@@ -14,6 +14,8 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
+// uncommenting this next line turns on some debug
+//#define DEBUG   1
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
@@ -52,9 +54,9 @@ const byte mc_Brightness = 5;
 const byte mc_Contrast = 6;
 
 // define microcontroller pins connected to the rotary encoder
-const int re_pinA = 2;     // encoder A pin
-const int re_pinB = 3;     // encoder B pin
-const int re_pinPush = 4;  // encoder pushbutton pin
+const int re_pinPush = 2;  // encoder pushbutton pin
+const int re_pinA = 3;     // encoder A pin
+const int re_pinB = 4;     // encoder B pin
 
 // define microcontroller pins that control the DDS-60
 const byte DDS_FQ_UD = 14;    // connected to AD9851 device select pin
@@ -239,7 +241,6 @@ void abort(const char *msg)
 
 //----------------------------------------
 // Convert an event number to a display string.
-// Used only for debug.
 //----------------------------------------
 
 const char *event2display(VFOEvent event)
@@ -280,12 +281,16 @@ void show_credits(void)
 
 void banner(void)
 {
+#if DEBUG
   Serial.printf(F("\n"));
   Serial.printf(F("*************************************************\n"));
   Serial.printf(F("*           %s %s%s (%s)          *\n"),
                 ProgramName, Version, MinorVersion, Callsign);
   Serial.printf(F("*************************************************\n"));
   Serial.printf(F("\n"));
+#else
+  Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
+#endif
 
   show_credits();
   delay(900);    // wait a bit
@@ -468,28 +473,40 @@ void menu_show(struct Menu *menu, int unused)
     {
       // get next event and handle it
       byte event = event_pop();
+#ifdef DEBUG
       Serial.printf(F("menu_show loop: event=%s\n"), event2display(event));
+#endif
 
       switch (event)
       {
         case vfo_RLeft:
+#ifdef DEBUG
           Serial.printf(F("menu_show: vfo_RLeft\n"));
+#endif
           if (--item_num < 0)
             item_num = 0;
           break;
         case vfo_RRight:
+#ifdef DEBUG
           Serial.printf(F("menu_show: vfo_RRight\n"));
+#endif
           if (++item_num >= menu->num_items)
             item_num = menu->num_items - 1;
           break;
         case vfo_DnRLeft:
+#ifdef DEBUG
           Serial.printf(F("menu_show: vfo_DnRLeft (ignored)\n"));
+#endif
           break;
         case vfo_DnRRight:
+#ifdef DEBUG
           Serial.printf(F("menu_show: vfo_DnRRight (ignored)\n"));
+#endif
           break;
         case vfo_Click:
+#ifdef DEBUG
           Serial.printf(F("menu_show: vfo_Click\n"));
+#endif
           if (menu->items[item_num]->action != NULL)
           {
             // if there's a handler, call it
@@ -502,14 +519,20 @@ void menu_show(struct Menu *menu, int unused)
             menu_show(menu->items[item_num]->menu, 0);
           }
           menu_draw(menu);    // redraw the menu header, item redrawn below
+#ifdef DEBUG
           Serial.printf(F("menu_show: end of vfo_Click handling\n"));
+#endif
           break;
         case vfo_HoldClick:
+#ifdef DEBUG
           Serial.printf(F("menu_show: vfo_HoldClick, exit menu\n"));
+#endif
           event_flush();
           return;             // back to the parent menu or main screen
         default:
+#ifdef DEBUG
           Serial.printf(F("menu_show: unrecognized event %d\n"), event);
+#endif
           break;
       }
 
@@ -560,6 +583,10 @@ int queue_aft = 0;    // points at next free slot for a pushed event
 
 void event_push(VFOEvent event)
 {
+#ifdef DEBUG
+  Serial.printf(F("event_push: pushing %s\n"), event2display(event));
+#endif
+
   // put new event into next empty slot
   event_queue[queue_fore] = event;
 
@@ -755,8 +782,10 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
   bool lead_zero = true;
   char prefix = '+';
 
+#ifdef DEBUG
   Serial.printf(F("display_sel_offset: value=%d, sel_col=%d, num_digits=%d, col=%d, row=%d\n"),
                 value, sel_col, num_digits, col, row);
+#endif
 
   // worry about a negative value
   if (value < 0)
@@ -865,7 +894,7 @@ bool re_setup(void)
   attachInterrupt(digitalPinToInterrupt(re_pinPush), pinPush_isr, CHANGE);
 
   // look at RE push button, if DOWN this function returns 'true'
-  return PIND & 0x10;
+  return digitalRead(re_pinPush);
 }
 
 //----------------------------------------
@@ -876,16 +905,27 @@ bool re_setup(void)
 void pinPush_isr(void)
 {
   // sample the pin value
-  re_down = (PIND & 0x10);
+  re_down = digitalRead(re_pinPush);
+#ifdef DEBUG
+    Serial.printf(F("pinPush_isr: re_down=0x%02X\n"), re_down);
+#endif
   
   if (re_down)
   {
+#ifdef DEBUG
+    Serial.printf(F("pinPush_isr: button DOWN\n"));
+#endif
+  
     // button pushed down
     re_rotation = false;      // no rotation while down so far
     re_down_time = millis();  // note time we went down
   }
   else
   {
+#ifdef DEBUG
+    Serial.printf(F("pinPush_isr: button UP\n"));
+#endif
+  
     // button released, check if rotation, UP event if not
     if (! re_rotation)
     {
@@ -934,12 +974,17 @@ void pinPush_isr(void)
 
 void pinA_isr(void)
 {
-  // sample the pin values for pin 0 to 7
-  byte reading = PIND & 0xC;  // mask pins of interest
-
-  if ((reading == B00001100) && aFlag)
-  { // check that we have both pins at detent (HIGH) and that we are expecting detent on
-    // this pin's rising edge
+  // sample the pin values
+  byte pin_A = digitalRead(re_pinA);
+  byte pin_B = digitalRead(re_pinB);
+  
+#ifdef DEBUG
+    Serial.printf(F("pinA_isr: pin_A=0x%02X, pin_B=0x%02X\n"), pin_A, pin_B);
+#endif
+  
+  if (pin_A && pin_B && aFlag)
+  { // check that we have both pins at detent (HIGH)
+    // and that we are expecting detent on this pin's rising edge
     if (re_down)
     {
       event_push(vfo_DnRLeft);
@@ -952,7 +997,7 @@ void pinA_isr(void)
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
   }
-  else if (reading == B00000100)
+  else if (pin_A && !pin_B)
   {
     // show we're expecting pinB to signal the transition to detent from free rotation
     bFlag = 1;
@@ -966,10 +1011,15 @@ void pinA_isr(void)
 
 void pinB_isr(void)
 {
-  // sample the pin values for pin 0 to 7
-  byte reading = PIND & 0xC;  //  mask pins of interest
+  // sample the pin values
+  byte pin_A = digitalRead(re_pinA);
+  byte pin_B = digitalRead(re_pinB);
 
-  if ((reading == B00001100) && bFlag)
+#ifdef DEBUG
+    Serial.printf(F("pinB_isr: pin_A=0x%02X, pin_B=0x%02X\n"), pin_A, pin_B);
+#endif
+  
+  if (pin_A && pin_B && bFlag)
   { // check that we have both pins at detent (HIGH) and that we are expecting detent on
     // this pin's rising edge
     if (re_down)
@@ -984,7 +1034,7 @@ void pinB_isr(void)
     bFlag = 0; //reset flags for the next turn
     aFlag = 0; //reset flags for the next turn
   }
-  else if (reading == B00001000)
+  else if (!pin_A && pin_B)
   {
     // show we're expecting pinA to signal the transition to detent from free rotation
     aFlag = 1;
@@ -1110,6 +1160,7 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 // Print all EEPROM saved data to console.
 //----------------------------------------
 
+#ifdef DEBUG
 void dump_eeprom(void)
 {
   Frequency freq;
@@ -1145,6 +1196,7 @@ void dump_eeprom(void)
 
   Serial.printf(F("=================================================\n"));
 }
+#endif
 
 //##############################################################################
 // Code to handle the DDS-60
@@ -1219,7 +1271,9 @@ void dds_update(Frequency frequency)
 
 void dds_standby(void)
 {
+#ifdef DEBUG
   Serial.printf(F("DDS into standby mode.\n"));
+#endif
   dds_update(0L);
 }
 
@@ -1229,7 +1283,9 @@ void dds_standby(void)
 
 void dds_online(void)
 {
-  Serial.printf(F("DDS into online mode.\n"));
+#ifdef DEBUG
+  Serial.printf(F("DDS into online mode, frequency=%dHz.\n"), VfoFrequency);
+#endif
   dds_update(VfoFrequency);
 }
 
@@ -1265,6 +1321,10 @@ void dds_setup(void)
 
 void setup(void)
 {
+#ifdef DEBUG
+  Serial.printf(F("DEBUG is defined\n"));
+#endif
+
   // initialize the BlankRow global to a blank string length of a display row
   BlankRow = (char *) malloc(NumCols + 1);
   for (int i = 0; i < NumCols; ++i)
@@ -1310,7 +1370,8 @@ void setup(void)
     LcdContrast = DefaultLcdContrast;
     analogWrite(mc_Contrast, LcdContrast);
     ReHoldClickTime = DefaultHoldClickTime;    
-
+    ReDClickTime = DefaultDClickTime;
+    
     Serial.printf(F("Resetting brightness to %d, contrast to %d and hold time to %d\n"),
                   LcdBrightness, LcdContrast, ReHoldClickTime);
     Serial.printf(F("Click the RE button to continue...\n"));
@@ -1819,7 +1880,9 @@ void draw_row1_time(UINT msec, UINT def_time)
 
 void holdclick_action(struct Menu *menu, int item_num)
 {
+#ifdef DEBUG
   Serial.printf(F("holdclick_action: entered\n"));
+#endif
 
   UINT holdtime = ReHoldClickTime;      // the value we change
   const UINT hold_step = 100;           // step adjustment +/-
@@ -1848,13 +1911,17 @@ void holdclick_action(struct Menu *menu, int item_num)
           holdtime -= hold_step;
           if (holdtime < MinHoldClickTime)
             holdtime = MinHoldClickTime;
+#ifdef DEBUG
           Serial.printf(F("holdclick_action: vfo_RLeft, after holdtime=%d\n"), holdtime);
+#endif
           break;
         case vfo_RRight:
           holdtime += hold_step;
           if (holdtime > MaxHoldClickTime)
             holdtime = MaxHoldClickTime;
+#ifdef DEBUG
           Serial.printf(F("holdclick_action: vfo_RRight, after holdtime=%d\n"), holdtime);
+#endif
           break;
         case vfo_Click:
           ReHoldClickTime = holdtime;
@@ -1885,7 +1952,9 @@ void holdclick_action(struct Menu *menu, int item_num)
 
 void doubleclick_action(struct Menu *menu, int item_num)
 {
+#ifdef DEBUG
   Serial.printf(F("doubleclick_action: entered, ReDClickTime=%dmsec\n"), ReDClickTime);
+#endif
 
   int dctime = ReDClickTime;      // the value we adjust
   UINT dclick_step = 100;         // step adjustment +/-
@@ -1914,13 +1983,17 @@ void doubleclick_action(struct Menu *menu, int item_num)
           dctime -= dclick_step;
           if (dctime < MinDClickTime)
             dctime = MinDClickTime;
+#ifdef DEBUG
           Serial.printf(F("doubleclick_action: vfo_RLeft, after dctime=%d\n"), dctime);
+#endif
           break;
         case vfo_RRight:
           dctime += dclick_step;
           if (dctime > MaxDClickTime)
             dctime = MaxDClickTime;
+#ifdef DEBUG
           Serial.printf(F("doubleclick_action: vfo_RRight, after dctime=%d\n"), dctime);
+#endif
           break;
         case vfo_Click:
           ReDClickTime = dctime;
@@ -1954,7 +2027,9 @@ void doubleclick_action(struct Menu *menu, int item_num)
 
 void calibrate_action(struct Menu *menu, int item_num)
 {
+#ifdef DEBUG
   Serial.printf(F("calibrate_action: entered, VfoClockOffset=%dmsec\n"), VfoClockOffset);
+#endif
 
   int save_offset = VfoClockOffset; // save the existing offset
   int seldig = 0;                   // the selected digit in the display
@@ -1991,31 +2066,43 @@ void calibrate_action(struct Menu *menu, int item_num)
           VfoClockOffset -= offset2bump[seldig];
           if (VfoClockOffset < MinClockOffset)
             VfoClockOffset = MinClockOffset;
+#ifdef DEBUG
           Serial.printf(F("calibrate_action: vfo_RLeft, after VfoClockOffset=%d\n"),
                         VfoClockOffset);
+#endif
           break;
         case vfo_RRight:
           VfoClockOffset += offset2bump[seldig];
           if (VfoClockOffset > MaxClockOffset)
             VfoClockOffset = MaxClockOffset;
+#ifdef DEBUG
           Serial.printf(F("calibrate_action: vfo_RRight, after VfoClockOffset=%d\n"),
                         VfoClockOffset);
+#endif
           break;
         case vfo_DnRLeft:
+#ifdef DEBUG
           Serial.printf(F("calibrate_action: vfo_DnRLeft\n"));
+#endif
           ++seldig;
           if (seldig >= MaxOffsetDigits)
             seldig = MaxOffsetDigits - 1;
+#ifdef DEBUG
           Serial.printf(F("calibrate_action: vfo_DnRLeft, after seldig=%d\n"),
                         seldig);
+#endif
           break;
         case vfo_DnRRight:
+#ifdef DEBUG
           Serial.printf(F("calibrate_action: vfo_DnRLeft\n"));
+#endif
           --seldig;
           if (seldig < 0)
             seldig = 0;
+#ifdef DEBUG
           Serial.printf(F("calibrate_action: vfo_DnRRight, after seldig=%d\n"),
                         seldig);
+#endif
           break;
         case vfo_Click:
           save_offset = VfoClockOffset; // for when we exit menuitem
