@@ -129,7 +129,7 @@ Schematic
 
 The code runs on this hardware arrangement:
 
-.. image:: DigitalVFO.png
+.. image:: DigitalVFO_1.1_Schematic.png
 
 
 Interface
