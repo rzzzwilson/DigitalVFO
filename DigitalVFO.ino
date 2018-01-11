@@ -20,7 +20,7 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.1";
-const char *MinorVersion = ".0";
+const char *MinorVersion = ".1";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
