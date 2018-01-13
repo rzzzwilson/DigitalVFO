@@ -2224,15 +2224,11 @@ void loop(void)
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MinFreq)
           VfoFrequency = MinFreq;
-//        if (VfoFrequency > MaxFreq)
-//          VfoFrequency = MaxFreq;
-       break;
+        break;
       case vfo_RRight:
         if (VfoFrequency >= MaxFreq)
           break;
         VfoFrequency += offset2bump[VfoSelectDigit];
-//        if (VfoFrequency < MinFreq)
-//          VfoFrequency = MinFreq;
         if (VfoFrequency > MaxFreq)
           VfoFrequency = MaxFreq;
         break;
