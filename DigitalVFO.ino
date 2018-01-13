@@ -2219,16 +2219,20 @@ void loop(void)
     switch (event)
     {
       case vfo_RLeft:
+        if (VfoFrequency <= MinFreq)
+          break;
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MinFreq)
           VfoFrequency = MinFreq;
-        if (VfoFrequency > MaxFreq)
-          VfoFrequency = MaxFreq;
+//        if (VfoFrequency > MaxFreq)
+//          VfoFrequency = MaxFreq;
        break;
       case vfo_RRight:
+        if (VfoFrequency >= MaxFreq)
+          break;
         VfoFrequency += offset2bump[VfoSelectDigit];
-        if (VfoFrequency < MinFreq)
-          VfoFrequency = MinFreq;
+//        if (VfoFrequency < MinFreq)
+//          VfoFrequency = MinFreq;
         if (VfoFrequency > MaxFreq)
           VfoFrequency = MaxFreq;
         break;
