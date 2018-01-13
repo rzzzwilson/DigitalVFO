@@ -2268,10 +2268,13 @@ void loop(void)
 
     // update the display, write changes to EEPROM
     display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
-    save_to_eeprom();         // FIXME: worry about frequent writes?
+//    save_to_eeprom();         // FIXME: worry about frequent writes?
 
     // if online, update DDS-60
     if (VfoMode == vfo_Online)
+    {
+      save_to_eeprom();
       dds_update(VfoFrequency);
+    }
   }
 }
