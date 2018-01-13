@@ -54,8 +54,8 @@ const byte mc_Brightness = 5;
 const byte mc_Contrast = 6;
 
 // define microcontroller pins connected to the rotary encoder
-const int re_pinPush = 2;  // encoder pushbutton pin
-const int re_pinA = 3;     // encoder A pin
+const int re_pinPush = 3;  // encoder pushbutton pin
+const int re_pinA = 2;     // encoder A pin
 const int re_pinB = 4;     // encoder B pin
 
 // define microcontroller pins that control the DDS-60
