@@ -1547,8 +1547,17 @@ void restoreslot_action(struct Menu *menu, int item_num)
             slot_num = NumSaveSlots - 1;
           break;
         case vfo_Click:
-          get_slot(slot_num, VfoFrequency, VfoSelectDigit);
-          display_flash();
+          Frequency tmp_freq;     // temp VFO frequency
+          SelOffset tmp_select;   // temp column index
+
+          //get_slot(slot_num, VfoFrequency, VfoSelectDigit);
+          get_slot(slot_num, tmp_freq, tmp_select);
+          if (tmp_freq > 0)
+          {
+            VfoFrequency = tmp_freq;
+            VfoSelectDigit = tmp_select;
+            display_flash();
+          }
           break;
         case vfo_HoldClick:
           event_flush();
