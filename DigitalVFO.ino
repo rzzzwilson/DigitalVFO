@@ -454,6 +454,7 @@ void vfo_display_mode(void)
 // External command routines.
 //
 // External commands are:
+//     ID;          get device identifire string
 //     MSO;         set VFO mode to 'online'
 //     MSS;         set VFO mode to 'standby'
 //     MG;          get VFO mode
@@ -466,11 +467,30 @@ void vfo_display_mode(void)
 //##############################################################################
 
 //----------------------------------------
+// Get the identifire string:
+//     ID;
+//----------------------------------------
+
+const char * xcmd_id(char *cmd)
+{
+  // if not legal, complain
+  if (strcmp(cmd, "ID;"))
+    return "ERROR";
+
+  // generate ID string and return
+  strcpy(FreqBuffer, ProgramName);
+  strcat(FreqBuffer, " ");
+  strcat(FreqBuffer, Version);
+  return FreqBuffer;
+}
+
+//----------------------------------------
 // Mode commands:
 //     MSO;
 //     MSS;
 //     MG;
 //----------------------------------------
+
 const char * xcmd_mode(char *cmd)
 {
   switch (cmd[1])
@@ -664,14 +684,16 @@ const char * do_external_cmd(char *cmd, int index)
   // process the command
   switch (cmd[0])
   {
-    case 'M':
-      return xcmd_mode(cmd);
-    case 'F':
-      return xcmd_freq(cmd);
     case 'C':
       return xcmd_cursor(cmd);
     case 'D':
       return xcmd_digit(cmd);
+    case 'F':
+      return xcmd_freq(cmd);
+    case 'I':
+      return xcmd_id(cmd);
+    case 'M':
+      return xcmd_mode(cmd);
   }
 
   return (char *) "ERROR";
