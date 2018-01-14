@@ -169,6 +169,10 @@ const int MaxOffsetDigits = 5;
 char CommandBuffer[MAX_COMMAND_LEN+1];
 int CommandIndex = 0;
 
+// buffer to assemble frequency as a string
+const int FreqBufferLen = 16;
+char FreqBuffer[FreqBufferLen];
+
 //##############################################################################
 // The VFO state variables and typedefs
 //
@@ -339,6 +343,70 @@ void ulong2buff(char *buf, int bufsize, ULONG value)
 }
 
 //----------------------------------------
+// Function to convert an unsigned long into a string.
+//     buf      address of buffer for byte results
+//     bufsize  the size of the buffer
+//     value    the unsigned long value to convert to a string
+// The buffer 'buf' is assumed long enough and is '\0' terminated.
+// Return address of first char in the string.
+//----------------------------------------
+
+char * ulong2str(char *buf, int bufsize, ULONG value)
+{
+  char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
+
+  while (value)
+  {
+    int rem = value % 10;
+
+    value = value / 10;
+    *ptr-- = rem + '0';
+  }
+
+  return ++ptr;
+}
+
+//----------------------------------------
+// Function to convert an array of byte digit values into an unsigned long.
+//     buf  address of buffer of byte digits, terminated with '\n'
+// Returns the unsigned long value.
+//----------------------------------------
+
+ULONG buff2ulong(char *buf)
+{
+  ULONG result = 0;
+  
+  while (*buf)
+  {
+    result *= 10;
+    result += *buf;
+    ++buf;
+  }
+
+  return result;
+}
+
+//----------------------------------------
+// Function to convert a string into an unsigned long.
+//     str  start of string of digits, terminated with '\0'
+// Returns the unsigned long value.
+//----------------------------------------
+
+ULONG str2ulong(char *str)
+{
+  ULONG result = 0;
+  
+  while (*str)
+  {
+    result *= 10;
+    result += *str - '0';
+    ++str;
+  }
+
+  return result;
+}
+
+//----------------------------------------
 // Convert a numeric mode to a display string.
 //----------------------------------------
 
@@ -366,6 +434,248 @@ void str2upper(char *str)
   }
 }
 
+//----------------------------------------
+// Display the VFO mode on the screen..
+//----------------------------------------
+
+void vfo_display_mode(void)
+{
+// FIXME: if we display something else on bottom row change this code!
+
+  // clear row 1 and write new mode string
+  lcd.setCursor(0, 1);
+  lcd.write(BlankRow);
+  lcd.setCursor(0, 1);
+  lcd.write(mode2display(VfoMode));
+}
+
+
+//##############################################################################
+// External command routines.
+//
+// External commands are:
+//     MSO;         set VFO mode to 'online'
+//     MSS;         set VFO mode to 'standby'
+//     MG;          get VFO mode
+//     FSnnnnnnnn;  set frequency to 'nnnnnnnn'
+//     FG;          get frequency
+//     CSn;         set cursor to index 'n'
+//     CG;          get cursor index
+//     DS+n;        increment frequency digit by 'n'
+//     DS-n;        decrement frequency digit by 'n'
+//##############################################################################
+
+//----------------------------------------
+// Mode commands:
+//     MSO;
+//     MSS;
+//     MG;
+//----------------------------------------
+const char * xcmd_mode(char *cmd)
+{
+  switch (cmd[1])
+  {
+    case 'G':
+      // return VFO status
+      if (strlen(cmd) != 3)
+        return "ERROR";
+      if (VfoMode == vfo_Standby)
+        return "STANDBY";
+      if (VfoMode == vfo_Online)
+        return "ONLINE";
+      break;
+    case 'S':
+      if (strlen(cmd) != 4)
+        return "ERROR";
+      switch (cmd[2])
+      {
+        case 'O':
+          // set ONLINE mode
+          VfoMode = vfo_Online;
+          vfo_display_mode();
+          return "OK";
+        case 'S':
+          // set 'standby' mode
+          VfoMode = vfo_Standby;
+          vfo_display_mode();
+          return "OK";
+      }
+      break;
+  }
+  
+  return "ERROR";
+}
+
+//----------------------------------------
+// Mode commands:
+//     FSnnnnnnnn;  set frequency to 'nnnnnnnn'
+//     FG;          get frequency
+//----------------------------------------
+
+const char * xcmd_freq(char *cmd)
+{
+  switch (cmd[1])
+  {
+    case 'G':
+      // return VFO frequency
+      if (strlen(cmd) == 3)
+      {
+        FreqBuffer[FreqBufferLen-1] = '\0';
+        return ulong2str(FreqBuffer, FreqBufferLen-2, VfoFrequency);
+      }
+      break;
+    case 'S':
+      if (strlen(cmd) <= 11)
+      {
+        char *freq_ptr = cmd + 2;
+
+        while (*freq_ptr != ';')
+        {
+          char ch = *freq_ptr++;
+  
+          if (ch < '0' || ch > '9')
+          {
+            return "ERROR";
+          }
+        }
+        *freq_ptr = '\0';    // remove terminating ';'
+        VfoFrequency = str2ulong(cmd+2);
+        display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars,
+                          NumCols - NumFreqChars - 2, 0);
+        return "OK";
+      }
+  }
+  
+  return "ERROR";
+}
+
+//----------------------------------------
+// Cursor commands:
+//     CSn;  set cursor index to 'n'
+//     CG;   get cursor index
+//----------------------------------------
+
+const char * xcmd_cursor(char *cmd)
+{
+  switch (cmd[1])
+  {
+    case 'G':
+      // return cursor index
+      if (strlen(cmd) == 3)
+      {
+        FreqBuffer[0] = VfoSelectDigit + '0';
+        FreqBuffer[1] = '\0';
+        return FreqBuffer;
+      }
+      break;
+    case 'S':
+      if (strlen(cmd) == 4)
+      {
+        char *result_ptr = cmd + 2;
+
+        int new_index = *result_ptr - '0';
+        if (new_index <= 7)
+        {
+          VfoSelectDigit = new_index;
+          display_sel_value(VfoFrequency, VfoSelectDigit,
+                            NumFreqChars, NumCols - NumFreqChars - 2, 0);
+          return "OK";
+        }
+      }
+      break;
+  }
+  
+  return "ERROR";
+}
+
+//----------------------------------------
+// Digit commands:
+//     DS+n;        increment frequency digit by 'n'
+//     DS-n;        decrement frequency digit by 'n'
+//----------------------------------------
+
+const char * xcmd_digit(char *cmd)
+{
+  switch (cmd[1])
+  {
+    case 'S':
+      if (strlen(cmd) == 5)
+      {
+        char sign = *(cmd + 2);
+
+        if (sign == '+' || sign == '-')
+        {
+          int inc = *(cmd + 3) - '0';
+
+          if (inc >= 0 && inc <= 9)
+          {
+            if (sign == '+')
+            {
+              while (inc--)
+              {
+                VfoFrequency += offset2bump[VfoSelectDigit];
+              }
+              if (VfoFrequency > MaxFreq)
+                VfoFrequency = MaxFreq;
+              display_sel_value(VfoFrequency, VfoSelectDigit,
+                                NumFreqChars, NumCols - NumFreqChars - 2, 0);
+            }
+            else
+            {
+              while (inc--)
+              {
+                VfoFrequency -= offset2bump[VfoSelectDigit];
+              }
+              if (VfoFrequency < MinFreq)
+                VfoFrequency = MinFreq;
+              display_sel_value(VfoFrequency, VfoSelectDigit,
+                                NumFreqChars, NumCols - NumFreqChars - 2, 0);
+            }
+            return "OK";
+          }
+        }
+      }
+      break;
+  }
+  
+  return "ERROR";
+}
+
+//----------------------------------------
+// Process an external command.
+//     cmd     address of command string buffer
+//     index   index of last char in string buffer
+// 'cmd' is '\0' terminated.
+// Returns the command response string.
+//----------------------------------------
+const char * do_external_cmd(char *cmd, int index)
+{
+  char end_char = cmd[index];
+
+  // ensure everything is uppercase
+  str2upper(cmd);
+
+  // if command too long it's illegal
+  if (end_char != COMMAND_END_CHAR)
+  {
+    return (char *) "ERROR";
+  }
+
+  // process the command
+  switch (cmd[0])
+  {
+    case 'M':
+      return xcmd_mode(cmd);
+    case 'F':
+      return xcmd_freq(cmd);
+    case 'C':
+      return xcmd_cursor(cmd);
+    case 'D':
+      return xcmd_digit(cmd);
+  }
+
+  return (char *) "ERROR";
+}
 
 //##############################################################################
 // Code to handle the DigitalVFO menus.
@@ -2180,12 +2490,8 @@ void vfo_toggle_mode(void)
     dds_online();
   }
 
-  // clear row 1 and write new mode string
-  lcd.setCursor(0, 1);
-  lcd.write(BlankRow);
-  lcd.setCursor(0, 1);
-  lcd.write(mode2display(VfoMode));
-// FIXME: if we display something else on bottom row change this code!
+  // update display
+  vfo_display_mode();
 }
 
 //----------------------------------------
@@ -2236,30 +2542,6 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 // Standard Arduino loop() function.
 //----------------------------------------
 
-char * do_external_cmd(char *cmd, int index)
-{
-  char end_char = cmd[index];
-  static char message[128];
-
-  // ensure everything is uppercase
-  str2upper(cmd);
-
-  // if command too long it's illegal
-  if (end_char != COMMAND_END_CHAR)
-  {
-    strcpy(message, "Ignored illegal command: '");
-    strcat(message, cmd);
-    strcat(message, "'");
-    return message;
-  }
-
-  // process the command
-  strcpy(message, "Would execute '");
-  strcat(message, cmd);
-  strcat(message, "'  command");
-  return message;
-}
-
 void loop(void)
 {
   // gather any commands from controller
@@ -2275,7 +2557,7 @@ void loop(void)
     if (ch == COMMAND_END_CHAR)   // if end of command, execute it
     {
       CommandBuffer[CommandIndex] = '\0';
-      Serial.printf(F("%s\n"), do_external_cmd(CommandBuffer, CommandIndex-1));
+      Serial.printf(F("%s;\n"), do_external_cmd(CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
     }
   }
