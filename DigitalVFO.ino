@@ -11,6 +11,7 @@
 // with overflow or underflow propagating to the left.
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <string.h>
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
@@ -20,7 +21,7 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.1";
-const char *MinorVersion = ".1";
+const char *MinorVersion = ".2";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -162,6 +163,11 @@ const int MaxOffsetDigits = 5;
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
 
+// buffer, etc, to gather external command strings
+#define MAX_COMMAND_LEN   16
+#define COMMAND_END_CHAR    ';'
+char CommandBuffer[MAX_COMMAND_LEN+1];
+int CommandIndex = 0;
 
 //##############################################################################
 // The VFO state variables and typedefs
@@ -345,6 +351,19 @@ const char *mode2display(Mode mode)
   }
 
   return "UNKNOWN MODE";
+}
+
+//----------------------------------------
+// Convert a string to uppercase in situ.
+//----------------------------------------
+
+void str2upper(char *str)
+{
+  while (*str)
+  {
+    *str = toupper(*str);
+    ++str;
+  }
 }
 
 
@@ -2217,8 +2236,50 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 // Standard Arduino loop() function.
 //----------------------------------------
 
+char * do_external_cmd(char *cmd, int index)
+{
+  char end_char = cmd[index];
+  static char message[128];
+
+  // ensure everything is uppercase
+  str2upper(cmd);
+
+  // if command too long it's illegal
+  if (end_char != COMMAND_END_CHAR)
+  {
+    strcpy(message, "Ignored illegal command: '");
+    strcat(message, cmd);
+    strcat(message, "'");
+    return message;
+  }
+
+  // process the command
+  strcpy(message, "Would execute '");
+  strcat(message, cmd);
+  strcat(message, "'  command");
+  return message;
+}
+
 void loop(void)
 {
+  // gather any commands from controller
+  while (Serial.available()) 
+  {
+    char ch = Serial.read();
+    
+    if (CommandIndex < MAX_COMMAND_LEN)
+    { 
+      CommandBuffer[CommandIndex++] = ch;
+    }
+    
+    if (ch == COMMAND_END_CHAR)   // if end of command, execute it
+    {
+      CommandBuffer[CommandIndex] = '\0';
+      Serial.printf(F("%s\n"), do_external_cmd(CommandBuffer, CommandIndex-1));
+      CommandIndex = 0;
+    }
+  }
+  
   // handle all events in the queue
   while (event_pending() > 0)
   {
@@ -2266,11 +2327,10 @@ void loop(void)
         break;
     }
 
-    // update the display, write changes to EEPROM
+    // update the display
     display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
-//    save_to_eeprom();         // FIXME: worry about frequent writes?
 
-    // if online, update DDS-60
+    // if online, update DDS-60 and write changes to EEPROM
     if (VfoMode == vfo_Online)
     {
       save_to_eeprom();
