@@ -454,7 +454,7 @@ void vfo_display_mode(void)
 // External command routines.
 //
 // External commands are:
-//     ID;          get device identifire string
+//     ID;          get device identifier string
 //     MSO;         set VFO mode to 'online'
 //     MSS;         set VFO mode to 'standby'
 //     MG;          get VFO mode
