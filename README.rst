@@ -16,6 +16,16 @@ There were a few problems with this:
 
 So there will be version 1.1 to address these issues.
 
+Version 1.2
+-----------
+
+After building the v1.1 PCB and paddling around on aliexpress.com to find
+different components, I'm starting on the v1.2 PCB.  Should be smaller, have
+the LCD located in a more natural place and place controls in more natural 
+positions.  May also rethink the power supply - perhaps run both board and
+DDS-60 from a 78L05 instead of running 9v to DDS-60 and using the onboard
+regulator to generate 5v for the main board.  Use the same case as before.
+
 Version 1.1
 -----------
 
