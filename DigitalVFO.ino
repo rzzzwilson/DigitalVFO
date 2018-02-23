@@ -15,13 +15,17 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
-// uncommenting this next line turns on some debug
-//#define DEBUG   1
+// debug levels:
+//     0 - no debug
+//     1 - some debug
+//     2 - more debug
+//     etc
+#define DEBUG   1
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.1";
-const char *MinorVersion = ".2";
+const char *MinorVersion = ".3";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -274,13 +278,17 @@ const char *event2display(VFOEvent event)
 // Show the credits on the LCD.
 //----------------------------------------
 
-void show_credits(void)
+void show_credits(bool minor)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(ProgramName);
   lcd.print(" ");
   lcd.print(Version);
+  if (minor)
+  {
+    lcd.print(MinorVersion);
+  }
   lcd.setCursor(NumCols-strlen(Callsign), 1);
   lcd.print(Callsign);
 }
@@ -291,18 +299,7 @@ void show_credits(void)
 
 void banner(void)
 {
-#if DEBUG
-  Serial.printf(F("\n"));
-  Serial.printf(F("*************************************************\n"));
-  Serial.printf(F("*           %s %s%s (%s)          *\n"),
-                ProgramName, Version, MinorVersion, Callsign);
-  Serial.printf(F("*************************************************\n"));
-  Serial.printf(F("\n"));
-#else
-  Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
-#endif
-
-  show_credits();
+  show_credits(false);
   delay(900);    // wait a bit
 
   // do a fade out, clear screen then normal brightness
@@ -454,6 +451,9 @@ void vfo_display_mode(void)
 // External command routines.
 //
 // External commands are:
+//     H;           send help text to console
+//     BR;          boot reload software via USB
+//     BS;          boot soft, restart program
 //     ID;          get device identifier string
 //     MSO;         set VFO mode to 'online'
 //     MSS;         set VFO mode to 'standby'
@@ -462,26 +462,72 @@ void vfo_display_mode(void)
 //     FG;          get frequency
 //     CSn;         set cursor to index 'n'
 //     CG;          get cursor index
-//     DS+n;        increment frequency digit by 'n'
-//     DS-n;        decrement frequency digit by 'n'
+//     DS+n;        increment display selected digit by 'n'
+//     DS-n;        decrement display selected digit by 'n'
 //##############################################################################
 
 //----------------------------------------
-// Get the identifire string:
+// Get help:
+//     H;
+//----------------------------------------
+
+const char * xcmd_help(char *answer, char *cmd)
+{
+  strcpy(answer, "H;           send help text to console\n");
+  strcat(answer, "BR;          boot reload software via USB\n");
+  strcat(answer, "BS;          boot soft, restart program\n");
+  strcat(answer, "ID;          get device identifier string\n");
+  strcat(answer, "MO;          set VFO mode to 'online'\n");
+  strcat(answer, "MS;          set VFO mode to 'standby'\n");
+  strcat(answer, "MG;          get VFO mode\n");
+  strcat(answer, "FSnnnnnnnn;  set frequency to 'nnnnnnnn'\n");
+  strcat(answer, "FG;          get frequency\n");
+  strcat(answer, "CSn;         set cursor to index 'n'\n");
+  strcat(answer, "CG;          get cursor index\n");
+  strcat(answer, "DS+n;        increment display selected digit by 'n'\n");
+  strcat(answer, "DS-n;        decrement display selected digit by 'n'");
+  return answer;
+}
+
+//----------------------------------------
+// Boot:
+//     BR;  boot, reload software via USB
+//     BS;  boot soft, restart program
+//----------------------------------------
+
+const char * xcmd_boot(char *answer, char *cmd)
+{
+  if (strlen(cmd) != 3)
+    return "ERROR";
+
+  switch (cmd[1])
+  {
+    case 'R':
+      // hard reboot
+      return "Would do hard reboot";
+    case 'S':
+      // soft reboot
+      return "Would do soft reboot";
+  }
+  
+  return "ERROR";
+}
+
+//----------------------------------------
+// Get the identifier string:
 //     ID;
 //----------------------------------------
 
-const char * xcmd_id(char *cmd)
+const char * xcmd_id(char *answer, char *cmd)
 {
   // if not legal, complain
   if (strcmp(cmd, "ID;"))
     return "ERROR";
 
   // generate ID string and return
-  strcpy(FreqBuffer, ProgramName);
-  strcat(FreqBuffer, " ");
-  strcat(FreqBuffer, Version);
-  return FreqBuffer;
+  strcpy(answer, Version);
+  strcat(answer, MinorVersion);
+  return answer;
 }
 
 //----------------------------------------
@@ -491,36 +537,30 @@ const char * xcmd_id(char *cmd)
 //     MG;
 //----------------------------------------
 
-const char * xcmd_mode(char *cmd)
+const char * xcmd_mode(char *answer, char *cmd)
 {
+  if (strlen(cmd) != 3)
+    return "ERROR";
+
   switch (cmd[1])
   {
     case 'G':
       // return VFO status
-      if (strlen(cmd) != 3)
-        return "ERROR";
       if (VfoMode == vfo_Standby)
         return "STANDBY";
       if (VfoMode == vfo_Online)
         return "ONLINE";
       break;
+    case 'O':
+      // set ONLINE mode
+      VfoMode = vfo_Online;
+      vfo_display_mode();
+      return "OK";
     case 'S':
-      if (strlen(cmd) != 4)
-        return "ERROR";
-      switch (cmd[2])
-      {
-        case 'O':
-          // set ONLINE mode
-          VfoMode = vfo_Online;
-          vfo_display_mode();
-          return "OK";
-        case 'S':
-          // set 'standby' mode
-          VfoMode = vfo_Standby;
-          vfo_display_mode();
-          return "OK";
-      }
-      break;
+      // set 'standby' mode
+      VfoMode = vfo_Standby;
+      vfo_display_mode();
+      return "OK";
   }
   
   return "ERROR";
@@ -532,7 +572,7 @@ const char * xcmd_mode(char *cmd)
 //     FG;          get frequency
 //----------------------------------------
 
-const char * xcmd_freq(char *cmd)
+const char * xcmd_freq(char *answer, char *cmd)
 {
   switch (cmd[1])
   {
@@ -575,7 +615,7 @@ const char * xcmd_freq(char *cmd)
 //     CG;   get cursor index
 //----------------------------------------
 
-const char * xcmd_cursor(char *cmd)
+const char * xcmd_cursor(char *answer, char *cmd)
 {
   switch (cmd[1])
   {
@@ -583,9 +623,9 @@ const char * xcmd_cursor(char *cmd)
       // return cursor index
       if (strlen(cmd) == 3)
       {
-        FreqBuffer[0] = VfoSelectDigit + '0';
-        FreqBuffer[1] = '\0';
-        return FreqBuffer;
+        answer[0] = VfoSelectDigit + '0';
+        answer[1] = '\0';
+        return answer;
       }
       break;
     case 'S':
@@ -614,7 +654,7 @@ const char * xcmd_cursor(char *cmd)
 //     DS-n;        decrement frequency digit by 'n'
 //----------------------------------------
 
-const char * xcmd_digit(char *cmd)
+const char * xcmd_digit(char *answer, char *cmd)
 {
   switch (cmd[1])
   {
@@ -668,7 +708,7 @@ const char * xcmd_digit(char *cmd)
 // 'cmd' is '\0' terminated.
 // Returns the command response string.
 //----------------------------------------
-const char * do_external_cmd(char *cmd, int index)
+const char * do_external_cmd(char *answer, char *cmd, int index)
 {
   char end_char = cmd[index];
 
@@ -678,25 +718,33 @@ const char * do_external_cmd(char *cmd, int index)
   // if command too long it's illegal
   if (end_char != COMMAND_END_CHAR)
   {
-    return (char *) "ERROR";
+    return (char *) "TOO LONG";
   }
+
+#if (DEBUG > 1)
+  Serial.printf(F("do_external_cmd: cmd='%s'\n"), cmd);
+#endif
 
   // process the command
   switch (cmd[0])
   {
+    case 'B':
+      return xcmd_boot(answer, cmd);
     case 'C':
-      return xcmd_cursor(cmd);
+      return xcmd_cursor(answer, cmd);
     case 'D':
-      return xcmd_digit(cmd);
+      return xcmd_digit(answer, cmd);
     case 'F':
-      return xcmd_freq(cmd);
+      return xcmd_freq(answer, cmd);
+    case 'H':
+      return xcmd_help(answer, cmd);
     case 'I':
-      return xcmd_id(cmd);
+      return xcmd_id(answer, cmd);
     case 'M':
-      return xcmd_mode(cmd);
+      return xcmd_mode(answer, cmd);
   }
 
-  return (char *) "ERROR";
+  return xcmd_help(answer, cmd);
 }
 
 //##############################################################################
@@ -722,7 +770,7 @@ struct Menu
   struct MenuItem **items;    // array of pointers to MenuItem data
 };
 
-#ifdef DEBUG
+#if (DEBUG > 0)
 //----------------------------------------
 // dump a MenuItem to the console
 // only called from dump_menu()
@@ -824,38 +872,38 @@ void menu_show(struct Menu *menu, int unused)
     {
       // get next event and handle it
       byte event = event_pop();
-#ifdef DEBUG
+#if (DEBUG > 0)
       Serial.printf(F("menu_show loop: event=%s\n"), event2display(event));
 #endif
 
       switch (event)
       {
         case vfo_RLeft:
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: vfo_RLeft\n"));
 #endif
           if (--item_num < 0)
             item_num = 0;
           break;
         case vfo_RRight:
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: vfo_RRight\n"));
 #endif
           if (++item_num >= menu->num_items)
             item_num = menu->num_items - 1;
           break;
         case vfo_DnRLeft:
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: vfo_DnRLeft (ignored)\n"));
 #endif
           break;
         case vfo_DnRRight:
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: vfo_DnRRight (ignored)\n"));
 #endif
           break;
         case vfo_Click:
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: vfo_Click\n"));
 #endif
           if (menu->items[item_num]->action != NULL)
@@ -870,18 +918,18 @@ void menu_show(struct Menu *menu, int unused)
             menu_show(menu->items[item_num]->menu, 0);
           }
           menu_draw(menu);    // redraw the menu header, item redrawn below
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: end of vfo_Click handling\n"));
 #endif
           break;
         case vfo_HoldClick:
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: vfo_HoldClick, exit menu\n"));
 #endif
           event_flush();
           return;             // back to the parent menu or main screen
         default:
-#ifdef DEBUG
+#if (DEBUG > 0)
           Serial.printf(F("menu_show: unrecognized event %d\n"), event);
 #endif
           break;
@@ -901,11 +949,11 @@ void menu_show(struct Menu *menu, int unused)
 void display_flash(void)
 {
   lcd.noDisplay();
-  delay(100);
+  delay(150);
   lcd.display();
-  delay(100);
+  delay(150);
   lcd.noDisplay();
-  delay(100);
+  delay(150);
   lcd.display();
 }
 
@@ -934,7 +982,7 @@ int queue_aft = 0;    // points at next free slot for a pushed event
 
 void event_push(VFOEvent event)
 {
-#ifdef DEBUG
+#if (DEBUG > 0)
   Serial.printf(F("event_push: pushing %s\n"), event2display(event));
 #endif
 
@@ -981,6 +1029,10 @@ VFOEvent event_pop(void)
     queue_aft = 0;
 
   interrupts();
+
+#if (DEBUG > 0)
+  Serial.printf(F("event_push: popping %s\n"), event2display(event));
+#endif
 
   return event;
 }
@@ -1133,7 +1185,7 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
   bool lead_zero = true;
   char prefix = '+';
 
-#ifdef DEBUG
+#if (DEBUG > 0)
   Serial.printf(F("display_sel_offset: value=%d, sel_col=%d, num_digits=%d, col=%d, row=%d\n"),
                 value, sel_col, num_digits, col, row);
 #endif
@@ -1257,13 +1309,13 @@ void pinPush_isr(void)
 {
   // sample the pin value
   re_down = digitalRead(re_pinPush);
-#ifdef DEBUG
+#if (DEBUG > 1)
     Serial.printf(F("pinPush_isr: re_down=0x%02X\n"), re_down);
 #endif
   
   if (re_down)
   {
-#ifdef DEBUG
+#if (DEBUG > 1)
     Serial.printf(F("pinPush_isr: button DOWN\n"));
 #endif
   
@@ -1273,7 +1325,7 @@ void pinPush_isr(void)
   }
   else
   {
-#ifdef DEBUG
+#if (DEBUG > 1)
     Serial.printf(F("pinPush_isr: button UP\n"));
 #endif
   
@@ -1329,7 +1381,7 @@ void pinA_isr(void)
   byte pin_A = digitalRead(re_pinA);
   byte pin_B = digitalRead(re_pinB);
   
-#ifdef DEBUG
+#if (DEBUG > 1)
     Serial.printf(F("pinA_isr: pin_A=0x%02X, pin_B=0x%02X\n"), pin_A, pin_B);
 #endif
   
@@ -1366,7 +1418,7 @@ void pinB_isr(void)
   byte pin_A = digitalRead(re_pinA);
   byte pin_B = digitalRead(re_pinB);
 
-#ifdef DEBUG
+#if (DEBUG > 1)
     Serial.printf(F("pinB_isr: pin_A=0x%02X, pin_B=0x%02X\n"), pin_A, pin_B);
 #endif
   
@@ -1511,7 +1563,7 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 // Print all EEPROM saved data to console.
 //----------------------------------------
 
-#ifdef DEBUG
+#if (DEBUG > 0)
 void dump_eeprom(void)
 {
   Frequency freq;
@@ -1601,7 +1653,7 @@ void dds_update(Frequency frequency)
   // as in datasheet page 12 - modified to include calibration offset
   ULONG data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
 
-#ifdef DEBUG
+#if (DEBUG > 1)
   Serial.printf(F("dds_update: frequency=%ld, VfoClockOffset=%d, data=%ld\n"),
                 frequency, VfoClockOffset, data);
 #endif
@@ -1622,7 +1674,7 @@ void dds_update(Frequency frequency)
 
 void dds_standby(void)
 {
-#ifdef DEBUG
+#if (DEBUG > 0)
   Serial.printf(F("DDS into standby mode.\n"));
 #endif
   dds_update(0L);
@@ -1634,7 +1686,7 @@ void dds_standby(void)
 
 void dds_online(void)
 {
-#ifdef DEBUG
+#if (DEBUG > 0)
   Serial.printf(F("DDS into online mode, frequency=%dHz.\n"), VfoFrequency);
 #endif
   dds_update(VfoFrequency);
@@ -1672,8 +1724,8 @@ void dds_setup(void)
 
 void setup(void)
 {
-#ifdef DEBUG
-  Serial.printf(F("DEBUG is defined\n"));
+#if (DEBUG > 0)
+  Serial.printf(F("DEBUG is defined as %d\n"), DEBUG);
 #endif
 
   // initialize the BlankRow global to a blank string length of a display row
@@ -1744,11 +1796,24 @@ void setup(void)
     delay(500);
   }
   
+#if (DEBUG > 0)
+  Serial.printf(F("\n"));
+  Serial.printf(F("*************************************************\n"));
+  Serial.printf(F("*           %s %s%s (%s)          *\n"),
+                ProgramName, Version, MinorVersion, Callsign);
+  Serial.printf(F("*************************************************\n"));
+  Serial.printf(F("\n"));
+#else
+  Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
+#endif
+
+  Serial.printf(F("Preparing ... \n"));
+
   // show program name and version number
   banner();
 
   // dump EEPROM values
-#ifdef DEBUG
+#if (DEBUG > 0)
   dump_eeprom();
 #endif
 
@@ -1757,6 +1822,7 @@ void setup(void)
 
   // show the main screen and continue in loop()
   show_main_screen();
+  Serial.printf(F("Ready\n"));
 }
 
 //----------------------------------------
@@ -2030,7 +2096,7 @@ void credits_action(struct Menu *menu, int item_num)
   event_flush();
 
   // show the credits
-  show_credits();
+  show_credits(true);
   
   // handle events in our own little event loop
   // we want to wait until some sort of click
@@ -2118,7 +2184,7 @@ void brightness_action(struct Menu *menu, int item_num)
       }
 
       // adjust display brightness so we can see the results
-      LcdBrightness = (index * 16) - 16;
+      LcdBrightness = index * 16;
       analogWrite(mc_Brightness, LcdBrightness);
 
       // show brightness value in row 1
@@ -2143,7 +2209,8 @@ void contrast_action(struct Menu *menu, int item_num)
   int old_contrast = LcdContrast;
   
   // convert contrast value to a display value in [0, 15]
-  int index = LcdContrast / 8;
+//  int index = LcdContrast / 8;
+  int index = LcdContrast / 10;
 
   if (index > 15)   // ensure in range
     index = 15;
@@ -2196,7 +2263,8 @@ void contrast_action(struct Menu *menu, int item_num)
       }
 
       // adjust display contrast so we can see the results
-      LcdContrast = index * 8;
+//      LcdContrast = index * 8;
+      LcdContrast = index * 10;
       analogWrite(mc_Contrast, LcdContrast);
 
       // show brightness value in row 1
@@ -2240,7 +2308,7 @@ void draw_row1_time(UINT msec, UINT def_time)
 
 void holdclick_action(struct Menu *menu, int item_num)
 {
-#ifdef DEBUG
+#if (DEBUG > 1)
   Serial.printf(F("holdclick_action: entered\n"));
 #endif
 
@@ -2271,7 +2339,7 @@ void holdclick_action(struct Menu *menu, int item_num)
           holdtime -= hold_step;
           if (holdtime < MinHoldClickTime)
             holdtime = MinHoldClickTime;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("holdclick_action: vfo_RLeft, after holdtime=%d\n"), holdtime);
 #endif
           break;
@@ -2279,7 +2347,7 @@ void holdclick_action(struct Menu *menu, int item_num)
           holdtime += hold_step;
           if (holdtime > MaxHoldClickTime)
             holdtime = MaxHoldClickTime;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("holdclick_action: vfo_RRight, after holdtime=%d\n"), holdtime);
 #endif
           break;
@@ -2312,7 +2380,7 @@ void holdclick_action(struct Menu *menu, int item_num)
 
 void doubleclick_action(struct Menu *menu, int item_num)
 {
-#ifdef DEBUG
+#if (DEBUG > 1)
   Serial.printf(F("doubleclick_action: entered, ReDClickTime=%dmsec\n"), ReDClickTime);
 #endif
 
@@ -2343,7 +2411,7 @@ void doubleclick_action(struct Menu *menu, int item_num)
           dctime -= dclick_step;
           if (dctime < MinDClickTime)
             dctime = MinDClickTime;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("doubleclick_action: vfo_RLeft, after dctime=%d\n"), dctime);
 #endif
           break;
@@ -2351,7 +2419,7 @@ void doubleclick_action(struct Menu *menu, int item_num)
           dctime += dclick_step;
           if (dctime > MaxDClickTime)
             dctime = MaxDClickTime;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("doubleclick_action: vfo_RRight, after dctime=%d\n"), dctime);
 #endif
           break;
@@ -2387,7 +2455,7 @@ void doubleclick_action(struct Menu *menu, int item_num)
 
 void calibrate_action(struct Menu *menu, int item_num)
 {
-#ifdef DEBUG
+#if (DEBUG > 1)
   Serial.printf(F("calibrate_action: entered, VfoClockOffset=%dmsec\n"), VfoClockOffset);
 #endif
 
@@ -2426,7 +2494,7 @@ void calibrate_action(struct Menu *menu, int item_num)
           VfoClockOffset -= offset2bump[seldig];
           if (VfoClockOffset < MinClockOffset)
             VfoClockOffset = MinClockOffset;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("calibrate_action: vfo_RLeft, after VfoClockOffset=%d\n"),
                         VfoClockOffset);
 #endif
@@ -2435,31 +2503,31 @@ void calibrate_action(struct Menu *menu, int item_num)
           VfoClockOffset += offset2bump[seldig];
           if (VfoClockOffset > MaxClockOffset)
             VfoClockOffset = MaxClockOffset;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("calibrate_action: vfo_RRight, after VfoClockOffset=%d\n"),
                         VfoClockOffset);
 #endif
           break;
         case vfo_DnRLeft:
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("calibrate_action: vfo_DnRLeft\n"));
 #endif
           ++seldig;
           if (seldig >= MaxOffsetDigits)
             seldig = MaxOffsetDigits - 1;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("calibrate_action: vfo_DnRLeft, after seldig=%d\n"),
                         seldig);
 #endif
           break;
         case vfo_DnRRight:
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("calibrate_action: vfo_DnRLeft\n"));
 #endif
           --seldig;
           if (seldig < 0)
             seldig = 0;
-#ifdef DEBUG
+#if (DEBUG > 1)
           Serial.printf(F("calibrate_action: vfo_DnRRight, after seldig=%d\n"),
                         seldig);
 #endif
@@ -2578,8 +2646,10 @@ void loop(void)
     
     if (ch == COMMAND_END_CHAR)   // if end of command, execute it
     {
+      char answer[512];
+      
       CommandBuffer[CommandIndex] = '\0';
-      Serial.printf(F("%s;\n"), do_external_cmd(CommandBuffer, CommandIndex-1));
+      Serial.printf(F("%s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
     }
   }
