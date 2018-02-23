@@ -205,6 +205,25 @@ int VfoClockOffset = 0;
 // Utility routines
 //##############################################################################
 
+// Should restart Teensy 3, will also disconnect USB during restart
+#define RESTART_ADDR       0xE000ED0C
+#define READ_RESTART()     (*(volatile uint32_t *)RESTART_ADDR)
+#define WRITE_RESTART(val) ((*(volatile uint32_t *)RESTART_ADDR) = (val))
+
+/* restart the Teensy, without invoking bootloader. */
+void restart(void)
+{
+  // 0000101111110100000000000000100
+  // Assert [2]SYSRESETREQ
+  WRITE_RESTART(0x5FA0004);  
+}
+
+/* reboot the Teensy, invoking bootloader. */
+void reboot(void)
+{
+  _reboot_Teensyduino_();
+}
+
 //----------------------------------------
 // Abort the program.
 // Tries to tell the world what went wrong, then just loops.
@@ -452,7 +471,7 @@ void vfo_display_mode(void)
 //
 // External commands are:
 //     H;           send help text to console
-//     BR;          boot reload software via USB
+//     BH;          boot hard, reload software via USB
 //     BS;          boot soft, restart program
 //     ID;          get device identifier string
 //     MSO;         set VFO mode to 'online'
@@ -474,7 +493,7 @@ void vfo_display_mode(void)
 const char * xcmd_help(char *answer, char *cmd)
 {
   strcpy(answer, "H;           send help text to console\n");
-  strcat(answer, "BR;          boot reload software via USB\n");
+  strcat(answer, "BH;          boot hard, reload software via USB\n");
   strcat(answer, "BS;          boot soft, restart program\n");
   strcat(answer, "ID;          get device identifier string\n");
   strcat(answer, "MO;          set VFO mode to 'online'\n");
@@ -502,12 +521,14 @@ const char * xcmd_boot(char *answer, char *cmd)
 
   switch (cmd[1])
   {
-    case 'R':
-      // hard reboot
-      return "Would do hard reboot";
+    case 'H':
+      // hard reboot DOESN'T SEEM TO WORK YET, not reloading from IDE?
+      reboot();
+      return "Doing hard reboot";
     case 'S':
       // soft reboot
-      return "Would do soft reboot";
+      restart();
+      return "Doing soft reboot";
   }
   
   return "ERROR";
