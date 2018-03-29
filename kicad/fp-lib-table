@@ -1,3 +1,0 @@
-(fp_lib_table
-  (lib (name DigitalVFO)(type KiCad)(uri "$(KIPRJMOD)/DigitalVFO.pretty")(options "")(descr ""))
-)
