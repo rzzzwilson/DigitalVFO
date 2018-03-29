@@ -17,7 +17,7 @@ There were a few problems with this:
 So there will be version 1.1 to address these issues.
 
 Version 1.2
------------
+===========
 
 After building the v1.1 PCB and paddling around on aliexpress.com to find
 different components, I'm starting on the v1.2 PCB.  Should be smaller, have
@@ -26,8 +26,19 @@ positions.  May also rethink the power supply - perhaps run both board and
 DDS-60 from a 78L05 instead of running 9v to DDS-60 and using the onboard
 regulator to generate 5v for the main board.  Use the same case as before.
 
+29 March Update
+---------------
+
+Version 1.2 of the PCB submitted to Seeed today.  Changes were:
+
+* moved components around to minimize vias
+* on-board BNC socket, saves on internal cables
+* moves Teensy to edge so USB goes through case, saves on internal cables
+* added provision for internal 2s Li-Ion battery and managet PCB feeding the DDS-60
+* added provision for LED power in battery power switch
+
 Version 1.1
------------
+===========
 
 Need to:
 
@@ -65,7 +76,7 @@ assembling the board and testing it shows the thing WORKS!  I had to change the
 code to match changes I made while setting out the PCB, BUT IT WORKS!!
 
 Version 1.0
------------
+===========
 
 The VFO hardware is complete.  Everything is inside a small metal case.  Perhaps
 too small a metal case as running at 12v the thing overheats and becomes
@@ -139,8 +150,14 @@ Schematic
 
 The code runs on this hardware arrangement:
 
-.. image:: DigitalVFO_1.1_Schematic.png
+.. image:: DigitalVFO_1.2_Schematic.png
 
+PCB
+=========
+
+The PCB looks like this:
+
+.. image:: DigitalVFO_1.2_PCB.png
 
 Interface
 =========
