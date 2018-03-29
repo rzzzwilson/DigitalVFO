@@ -34,7 +34,7 @@ Version 1.2 of the PCB submitted to Seeed today.  Changes were:
 * moved components around to minimize vias
 * on-board BNC socket, saves on internal cables
 * moves Teensy to edge so USB goes through case, saves on internal cables
-* added provision for internal 2s Li-Ion battery and managet PCB feeding the DDS-60
+* added provision for internal 2s Li-Ion battery and manager PCB feeding the DDS-60
 * added provision for LED power in battery power switch
 
 Version 1.1
