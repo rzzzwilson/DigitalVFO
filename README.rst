@@ -148,14 +148,14 @@ I got the rotary encoder from
 Schematic
 =========
 
-The code runs on this hardware arrangement:
+The latest code runs on this hardware arrangement:
 
 .. image:: DigitalVFO_1.2_Schematic.png
 
 PCB
 =========
 
-The PCB looks like this:
+The 1.2 PCB looks like this:
 
 .. image:: DigitalVFO_1.2_PCB.png
 
