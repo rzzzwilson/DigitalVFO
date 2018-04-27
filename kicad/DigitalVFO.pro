@@ -1,4 +1,4 @@
-update=Thursday, 29 March 2018 'pmt' 05:23:28 pm
+update=2018 April 27, Friday 10:02:26
 version=1
 last_client=kicad
 [pcbnew]
@@ -63,7 +63,7 @@ LibName31=valves
 [schematic_editor]
 version=1
 PageLayoutDescrFile=
-PlotDirectoryName=/Users/r-w/Desktop/
+PlotDirectoryName=/Users/r-w/git/DigitalVFO/
 SubpartIdSeparator=0
 SubpartFirstId=65
 NetFmtName=

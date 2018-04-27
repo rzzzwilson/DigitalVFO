@@ -37,13 +37,13 @@ $Descr A4 11693 8268
 encoding utf-8
 Sheet 1 1
 Title "DigitalVFO"
-Date "26 March 2018"
-Rev "1.2"
+Date "27 April 2018"
+Rev "1.4"
 Comp ""
 Comment1 "Provision for internal battery and power switch with LED."
-Comment2 "A VFO controlled by a rotary encoder with push switch."
+Comment2 "Teensy can monitor input Lithium battery voltage."
 Comment3 ""
-Comment4 ""
+Comment4 "A VFO controlled by a rotary encoder."
 $EndDescr
 $Comp
 L 74HC14 U1
@@ -631,12 +631,12 @@ $EndComp
 $Comp
 L D_ALT D1
 U 1 1 5AB7F8C6
-P 8550 4400
-F 0 "D1" H 8550 4500 50  0000 C CNN
-F 1 "1N4001" H 8550 4300 50  0000 C CNN
-F 2 "DigitalVFO:Diode_SmH" H 8550 4400 50  0001 C CNN
-F 3 "" H 8550 4400 50  0001 C CNN
-	1    8550 4400
+P 8250 4400
+F 0 "D1" H 8250 4500 50  0000 C CNN
+F 1 "1N4001" H 8250 4300 50  0000 C CNN
+F 2 "DigitalVFO:Diode_SmH" H 8250 4400 50  0001 C CNN
+F 3 "" H 8250 4400 50  0001 C CNN
+	1    8250 4400
 	1    0    0    -1  
 $EndComp
 $Comp
@@ -651,9 +651,9 @@ F 3 "" H 7750 4850 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	8700 4400 8900 4400
+	8900 4400 8400 4400
 Wire Wire Line
-	8400 4400 7450 4400
+	8100 4400 7450 4400
 Wire Wire Line
 	7450 4400 7450 5250
 $Comp
@@ -680,17 +680,6 @@ F 3 "" H 8900 4650 50  0001 C CNN
 $EndComp
 Wire Wire Line
 	8900 4500 8900 4650
-$Comp
-L Teensy3.2 U2
-U 1 1 5AB80DEC
-P 5500 2250
-F 0 "U2" H 4950 3400 60  0000 C CNN
-F 1 "Teensy3.2" H 5500 2250 60  0000 C CNN
-F 2 "DigitalVFO:Conn_DIP28w" H 5500 2250 60  0001 C CNN
-F 3 "" H 5500 2250 60  0001 C CNN
-	1    5500 2250
-	1    0    0    -1  
-$EndComp
 $Comp
 L DDS-60 U4
 U 1 1 5AB80E84
@@ -790,7 +779,7 @@ U 1 1 5AB8824F
 P 7050 4450
 F 0 "J1" H 6930 4460 50  0000 C CNN
 F 1 "RF Out" H 7050 4600 50  0000 C CNN
-F 2 "DigitalVFO:BNC_Socket" V 7050 4450 50  0001 C CNN
+F 2 "DigitalVFO:BNC_Socket_TYCO-AMP" V 7050 4450 50  0001 C CNN
 F 3 "" V 7050 4450 50  0001 C CNN
 	1    7050 4450
 	1    0    0    -1  
@@ -866,9 +855,7 @@ F 3 "" H 6650 4750 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Notes Line
-	7350 4200 9450 4200
-Wire Notes Line
-	9450 4200 9450 6150
+	9450 3800 9450 6150
 Wire Notes Line
 	9450 6150 8150 6150
 Wire Notes Line
@@ -876,9 +863,9 @@ Wire Notes Line
 Wire Notes Line
 	8150 5250 7350 5250
 Wire Notes Line
-	7350 5250 7350 4200
+	7350 5250 7350 3800
 Text Notes 9550 4550 0    60   ~ 0
-Optional external battery\nand power switch with LED.\nVFO can be run from USB\npower from Teensy 3.2.
+Optional external battery and\nmonitoring circuit, plus\npower switch with LED.\nVFO can be run from USB\npower from Teensy 3.2.
 $Bitmap
 Pos 10900 6850
 Scale 1.000000
@@ -1642,4 +1629,88 @@ C5 2B 9B D8 AB 73 38 71 0E 56 55 C0 07 9B 03 34 7D C9 FB 0C C2 1E EA F5 9F 45 60
 AE 42 60 82 
 EndData
 $EndBitmap
+Wire Notes Line
+	7350 3800 9450 3800
+$Comp
+L R_Small R12
+U 1 1 5AE2892A
+P 8100 3900
+F 0 "R12" V 8200 3850 50  0000 L CNN
+F 1 "39K" V 8050 4000 50  0000 L CNN
+F 2 "DigitalVFO:Res_SmH" H 8100 3900 50  0001 C CNN
+F 3 "" H 8100 3900 50  0001 C CNN
+	1    8100 3900
+	0    1    1    0   
+$EndComp
+$Comp
+L R_Small R13
+U 1 1 5AE28A8A
+P 7700 3900
+F 0 "R13" V 7800 3850 50  0000 L CNN
+F 1 "10K" V 7650 3650 50  0000 L CNN
+F 2 "DigitalVFO:Res_SmH" H 7700 3900 50  0001 C CNN
+F 3 "" H 7700 3900 50  0001 C CNN
+	1    7700 3900
+	0    1    1    0   
+$EndComp
+Wire Wire Line
+	7800 3900 8000 3900
+Wire Wire Line
+	8200 3900 8900 3900
+Wire Wire Line
+	8900 3900 8900 4400
+Connection ~ 8900 4400
+$Comp
+L C_Small C8
+U 1 1 5AE28C83
+P 7900 4050
+F 0 "C8" H 7910 4120 50  0000 L CNN
+F 1 "0.1uF" H 7910 3970 50  0000 L CNN
+F 2 "DigitalVFO:Cap_SmV" H 7900 4050 50  0001 C CNN
+F 3 "" H 7900 4050 50  0001 C CNN
+	1    7900 4050
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7900 2100 7900 3950
+Connection ~ 7900 3900
+$Comp
+L GND #PWR028
+U 1 1 5AE28DCB
+P 7900 4150
+F 0 "#PWR028" H 7900 3900 50  0001 C CNN
+F 1 "GND" H 7900 4000 50  0000 C CNN
+F 2 "" H 7900 4150 50  0001 C CNN
+F 3 "" H 7900 4150 50  0001 C CNN
+	1    7900 4150
+	1    0    0    -1  
+$EndComp
+$Comp
+L GND #PWR029
+U 1 1 5AE290F2
+P 7500 4000
+F 0 "#PWR029" H 7500 3750 50  0001 C CNN
+F 1 "GND" H 7500 3850 50  0000 C CNN
+F 2 "" H 7500 4000 50  0001 C CNN
+F 3 "" H 7500 4000 50  0001 C CNN
+	1    7500 4000
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	7500 4000 7500 3900
+Wire Wire Line
+	7500 3900 7600 3900
+Wire Wire Line
+	7900 2100 6300 2100
+$Comp
+L Teensy3.2 U2
+U 1 1 5AE2B0F8
+P 5500 2250
+F 0 "U2" H 4950 3400 60  0000 C CNN
+F 1 "Teensy3.2" H 5500 2250 60  0000 C CNN
+F 2 "" H 5500 2250 60  0001 C CNN
+F 3 "" H 5500 2250 60  0001 C CNN
+	1    5500 2250
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC
