@@ -16,6 +16,18 @@ There were a few problems with this:
 
 So there will be version 1.1 to address these issues.
 
+Version 1.4
+===========
+
+19 May Update
+-------------
+
+The 1.2 version board was a bust - the BNC connector I used was junk.
+Redesigned for another connector, that was 1.3.  Decided to add battery
+monitoring, that was 1.4
+
+Board back from Seeed, built and operating.  Software development time!
+
 Version 1.2
 ===========
 
