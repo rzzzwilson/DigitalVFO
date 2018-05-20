@@ -411,12 +411,19 @@ char * ulong2str(char *buf, int bufsize, ULONG value)
 {
   char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
 
-  while (value)
+  if (value == 0L)
   {
-    int rem = value % 10;
-
-    value = value / 10;
-    *ptr-- = rem + '0';
+    *ptr-- = '0';
+  }
+  else
+  {
+    while (value)
+    {
+      int rem = value % 10;
+  
+      value = value / 10;
+      *ptr-- = rem + '0';
+    }
   }
 
   return ++ptr;
@@ -550,9 +557,9 @@ const char * xcmd_help(char *answer, char *cmd)
   strcat(answer, "CG;          get cursor index\n");
   strcat(answer, "DS+n;        increment display selected digit by 'n'\n");
   strcat(answer, "DS-n;        decrement display selected digit by 'n'\n");
-  strcat(answer, "PBSn;        set presentation brightness to N (0, 128)\n");
+  strcat(answer, "PBSn;        set presentation brightness to N (0, 15)\n");
   strcat(answer, "PBG;         get presentation brightness\n");
-  strcat(answer, "PCSn;        set presentation contrast to N (0, 128)\n");
+  strcat(answer, "PCSn;        set presentation contrast to N (0, 15)\n");
   strcat(answer, "PCG;         get presentation contrast\n");
   strcat(answer, "------------------------------------------------\n");
   return answer;
@@ -773,10 +780,78 @@ const char * xcmd_digit(char *answer, char *cmd)
 }
 
 //----------------------------------------
+// Convert a brightness 'index' to a brightness value.
+//
+//     index  brightness index in [1, 16]
+//
+// Returns the brightness value in range [15, 255], step 16.
+//----------------------------------------
+int brightness_index2value(int index)
+{
+  // clamp 'index' to range [1, 16]
+  if (index < 1) index = 1;
+  if (index > 16) index = 16;
+
+  // return the appropriate value
+  return index * 16 - 1;
+}
+
+//----------------------------------------
+// Convert a brightness value to a brightness 'index'.
+//
+//     value  brightness value in the range [15, 255], step 16
+//
+// Returns the brightness index in range [1, 16].
+//----------------------------------------
+int brightness_value2index(int value)
+{
+  // clamp 'value' to canonical value in range [15, 255], step 10
+  if (value < 15) value = 15;
+  if (value > 255) value = 255;
+  value = ((value + 1) / 16) * 16 - 1;
+  
+  return (value + 16) / 16;
+}
+
+//----------------------------------------
+// Convert a contrast 'index' to a contrast value.
+//
+//     index  contrast index in [0, 15]
+//
+// Returns the contrast value in range [0, 150], step 10.
+//----------------------------------------
+int contrast_index2value(int index)
+{
+  // clamp 'index' to range [0, 15]
+  if (index < 0) index = 0;
+  if (index > 15) index = 15;
+
+  // return the appropriate value
+  return index * 10;
+}
+
+//----------------------------------------
+// Convert a contrast value to a contrast 'index'.
+//
+//     value  contrast value in the range [0, 150], step 10
+//
+// Returns the contrast index in range [0, 15].
+//----------------------------------------
+int contrast_value2index(int value)
+{
+  // clamp 'value' to canonical value in range [0, 150], step 10
+  if (value < 0) value = 0;
+  if (value > 150) value = 150;
+  value = (value / 10) * 10;
+  
+  return value / 10;
+}
+
+//----------------------------------------
 // Display:
-//     PBSn;  presentation brightness set to N
+//     PBSn;  presentation brightness set to N [1, 16]
 //     PBG;   get presentation brightness
-//     PCSn;  presentation contrast set to N
+//     PCSn;  presentation contrast set to N [0, 15]
 //     PCG;   get presentation contrast
 //----------------------------------------
 
@@ -791,7 +866,7 @@ const char * xcmd_presentation(char *answer, char *cmd)
       switch (cmd[2])
       {
         case 'S':
-          {
+        {
             // set brightness
             char *ch_ptr = cmd + 3;
   
@@ -805,26 +880,78 @@ const char * xcmd_presentation(char *answer, char *cmd)
               }
             }
             *ch_ptr = '\0';    // remove terminating ';'
-            int new_b = (int) str2ulong(cmd+3);
-            if ((new_b <15) || (new_b > 255))
+            int b_index = (int) str2ulong(cmd+3);
+            if ((b_index < 1) || (b_index > 16))
               return "ERROR";
-            LcdBrightness = new_b;
+            LcdBrightness = brightness_index2value(b_index);
             analogWrite(mc_Brightness, LcdBrightness);
-            Serial.printf(F("xcmd_presentation: set brightness to %d\n"), LcdBrightness);
+            Serial.printf(F("xcmd_presentation: set brightness to %d, value=%d\n"),
+                          LcdBrightness, b_index);
             return "OK";
-          }
+        }
 
         case 'G':
           // get brightness
-          ulong2str(answer, 3, (ulong) LcdBrightness);
-          answer[3] = '\0';
+          int b_index = brightness_value2index(LcdBrightness);
+          Serial.printf(F("PBG: LcdBrightness=%d, b_index=%d\n"), LcdBrightness, b_index);
+          if (b_index > 9)
+          {
+            ulong2str(answer, 2, (int) b_index);
+            answer[2] = '\0';
+          }
+          else
+          {
+            ulong2str(answer, 1, (int) b_index);
+            answer[1] = '\0';
+          }
           return answer;
       }
 
     case 'C':
-      // soft reboot
-      restart();
-      return "Doing nothing for DC?";
+      // contrast
+      switch (cmd[2])
+      {
+        case 'S':
+          {
+            // set contrast
+            char *ch_ptr = cmd + 3;
+  
+            while (*ch_ptr != ';')
+            {
+              char ch = *ch_ptr++;
+    
+              if (ch < '0' || ch > '9')
+              {
+                return "ERROR";
+              }
+            }
+            *ch_ptr = '\0';    // remove terminating ';'
+            int c_index = (int) str2ulong(cmd+3);
+            if ((c_index < 0) || (c_index > 15))
+              return "ERROR";
+            LcdContrast = contrast_index2value(c_index);
+            analogWrite(mc_Contrast, LcdContrast);
+            Serial.printf(F("xcmd_presentation: set contrast to %d, index=%d\n"),
+                          LcdContrast, c_index);
+            return "OK";
+          }
+          
+        case 'G':
+          // get contrast
+          int c_index = contrast_value2index(LcdContrast);
+          Serial.printf(F("PCG: LcdContrast=%d, c_index=%d\n"), LcdContrast, c_index);
+          if (c_index > 9)
+          {
+            ulong2str(answer, 2, (int) c_index);
+            answer[2] = '\0';
+          }
+          else
+          {
+            ulong2str(answer, 1, (int) c_index);
+            answer[1] = '\0';
+          }
+          return answer;      
+      }
   }
   
   return "ERROR";

@@ -38,12 +38,12 @@ encoding utf-8
 Sheet 1 1
 Title "DigitalVFO"
 Date "27 April 2018"
-Rev "1.4"
+Rev "1.5"
 Comp ""
 Comment1 "Provision for internal battery and power switch with LED."
-Comment2 "Teensy can monitor input Lithium battery voltage."
+Comment2 "Microcontroller can monitor input Lithium battery voltage."
 Comment3 ""
-Comment4 "A VFO controlled by a rotary encoder."
+Comment4 "A DDS VFO controlled by a rotary encoder."
 $EndDescr
 $Comp
 L 74HC14 U1
@@ -507,18 +507,18 @@ Connection ~ 2450 2150
 Wire Wire Line
 	2450 2400 2450 2500
 Wire Wire Line
-	3200 800  9100 800 
+	3200 750  9100 750 
 Wire Wire Line
-	5500 800  5500 950 
+	5500 750  5500 950 
 $Comp
 L +5V #PWR011
 U 1 1 5AB7D64D
-P 3200 800
-F 0 "#PWR011" H 3200 650 50  0001 C CNN
-F 1 "+5V" H 3200 940 50  0000 C CNN
-F 2 "" H 3200 800 50  0001 C CNN
-F 3 "" H 3200 800 50  0001 C CNN
-	1    3200 800 
+P 3200 750
+F 0 "#PWR011" H 3200 600 50  0001 C CNN
+F 1 "+5V" H 3200 890 50  0000 C CNN
+F 2 "" H 3200 750 50  0001 C CNN
+F 3 "" H 3200 750 50  0001 C CNN
+	1    3200 750 
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
@@ -599,11 +599,11 @@ Wire Wire Line
 Wire Wire Line
 	6450 4850 6650 4850
 Wire Wire Line
-	9100 800  9100 950 
-Connection ~ 5500 800 
+	9100 750  9100 950 
+Connection ~ 5500 750 
 Wire Wire Line
-	8600 950  8600 800 
-Connection ~ 8600 800 
+	8600 950  8600 750 
+Connection ~ 8600 750 
 Wire Wire Line
 	8600 3550 9100 3550
 $Comp
@@ -769,8 +769,8 @@ F 3 "" H 6700 1100 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	6700 850  6700 800 
-Connection ~ 6700 800 
+	6700 850  6700 750 
+Connection ~ 6700 750 
 Wire Wire Line
 	6700 1050 6700 1100
 $Comp
@@ -787,38 +787,38 @@ $EndComp
 $Comp
 L VCC #PWR022
 U 1 1 5AB7EED1
-P 8600 800
-F 0 "#PWR022" H 8600 650 50  0001 C CNN
-F 1 "VCC" H 8600 950 50  0000 C CNN
-F 2 "" H 8600 800 50  0001 C CNN
-F 3 "" H 8600 800 50  0001 C CNN
-	1    8600 800 
+P 8600 750
+F 0 "#PWR022" H 8600 600 50  0001 C CNN
+F 1 "VCC" H 8600 900 50  0000 C CNN
+F 2 "" H 8600 750 50  0001 C CNN
+F 3 "" H 8600 750 50  0001 C CNN
+	1    8600 750 
 	1    0    0    -1  
 $EndComp
 $Comp
 L PWR_FLAG #FLG023
 U 1 1 5AB8A9A8
-P 3300 5850
-F 0 "#FLG023" H 3300 5925 50  0001 C CNN
-F 1 "PWR_FLAG" H 3300 6000 50  0000 C CNN
-F 2 "" H 3300 5850 50  0001 C CNN
-F 3 "" H 3300 5850 50  0001 C CNN
-	1    3300 5850
+P 3250 5850
+F 0 "#FLG023" H 3250 5925 50  0001 C CNN
+F 1 "PWR_FLAG" H 3250 6000 50  0000 C CNN
+F 2 "" H 3250 5850 50  0001 C CNN
+F 3 "" H 3250 5850 50  0001 C CNN
+	1    3250 5850
 	1    0    0    -1  
 $EndComp
 $Comp
 L GND #PWR024
 U 1 1 5AB8A9FE
-P 3300 5950
-F 0 "#PWR024" H 3300 5700 50  0001 C CNN
-F 1 "GND" H 3300 5800 50  0000 C CNN
-F 2 "" H 3300 5950 50  0001 C CNN
-F 3 "" H 3300 5950 50  0001 C CNN
-	1    3300 5950
+P 3250 5950
+F 0 "#PWR024" H 3250 5700 50  0001 C CNN
+F 1 "GND" H 3250 5800 50  0000 C CNN
+F 2 "" H 3250 5950 50  0001 C CNN
+F 3 "" H 3250 5950 50  0001 C CNN
+	1    3250 5950
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	3300 5850 3300 5950
+	3250 5850 3250 5950
 $Comp
 L PWR_FLAG #FLG025
 U 1 1 5AB8B393
@@ -1713,7 +1713,15 @@ F 3 "" H 5500 2250 60  0001 C CNN
 	1    5500 2250
 	1    0    0    -1  
 $EndComp
-Connection ~ 3200 800 
+Connection ~ 3200 750 
 Connection ~ 5000 3550
 Connection ~ 8600 3550
+Wire Wire Line
+	3200 750  3200 800 
+Text Label 7650 2100 0    60   ~ 0
+BMON
+Text Label 7050 4900 0    60   ~ 0
+RF
+Text Label 7450 4600 0    60   ~ 0
+BATT
 $EndSCHEMATC
