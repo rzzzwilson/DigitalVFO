@@ -15,6 +15,12 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
+//-----
+// Conditional compile flags
+//-----
+
+#define INC_BATTERY   1
+
 // debug bit masks:
 #define DEBUG_DDS     (1 << 0)
 #define DEBUG_FREQ    (1 << 1)
@@ -24,7 +30,9 @@
 #define DEBUG_RE      (1 << 5)
 #define DEBUG_INT     (1 << 6)
 #define DEBUG_DISP    (1 << 7)
+#if INC_BATTERY
 #define DEBUG_BATT    (1 << 8)
+#endif
 
 #define DEBUG         (DEBUG_BATT)
 //#define DEBUG         0
@@ -333,6 +341,10 @@ void decode_debug_levels(int debug)
     Serial.println("    DEBUG_INT\tbit is set");
   if (debug & DEBUG_DISP)
     Serial.println("    DEBUG_DISP\tbit is set");
+#if INC_BATTERY
+  if (debug & DEBUG_BATT)
+    Serial.println("    DEBUG_BATT\tbit is set");
+#endif
 }
 
 //----------------------------------------
@@ -2979,11 +2991,12 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 // Standard Arduino loop() function.
 //----------------------------------------
 
-const float MaxVoltage = 8.0;   // battery voltage for "100% full"
-const float MinVoltage = 7.0;   // battery voltage for "0% full"
+const float MaxVoltage = 8.2;   // battery voltage for "100% full"
+const float MinVoltage = 6.4;   // battery voltage for "0% full"
 
 void loop(void)
 {
+#if INC_BATTERY
   // measure voltage every second
   // we will get a value of 1023 for 3.3 volts
   static UINT last_volts_time = -VoltageDelay;    // millis() value last time we measured
@@ -3012,7 +3025,8 @@ void loop(void)
     }
     display_battery();
   }
-  
+#endif
+
   // gather any commands from controller
   while (Serial.available()) 
   {
@@ -3086,7 +3100,9 @@ void loop(void)
 
     // update the display
     display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
+#if INC_BATTERY
     display_battery();
+#endif
 
     // if online, update DDS-60 and write changes to EEPROM
 #if (DEBUG & DEBUG_FREQ)
