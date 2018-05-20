@@ -24,8 +24,9 @@
 #define DEBUG_RE      (1 << 5)
 #define DEBUG_INT     (1 << 6)
 #define DEBUG_DISP    (1 << 7)
+#define DEBUG_BATT    (1 << 8)
 
-#define DEBUG         (DEBUG_DDS | DEBUG_FREQ | DEBUG_EVENT)
+#define DEBUG         (DEBUG_BATT)
 //#define DEBUG         0
 
 // Digital VFO program name & version
@@ -91,7 +92,8 @@ const int NumFreqChars = 8;
 // address in display CGRAM for definable and other characters
 const int SelectChar = 0;     // shows 'underlined' decimal digits (dynamic, 0 to 9)
 const int SpaceChar = 1;      // shows an 'underlined' space character
-const int InUseChar = 2;      // shosws a right-facing arrow
+const int InUseChar = 2;      // shows a right-facing arrow
+const int BatteryChar = 3;    // shows the appropriate battery symbol
 
 const int AllsetChar = 0xff;  // the 'all bits set' char in display RAM, used for 'bar' display
 
@@ -136,6 +138,22 @@ const UINT DefaultLcdContrast = 0;
 const UINT DefaultLcdBrightness = 150;
 
 //-----
+// battery symbols
+//-----
+
+byte battunder[8] = {0x0e,0x1f,0x11,0x11,0x11,0x11,0x11,0x11};
+byte batt00[8]    = {0x0e,0x1f,0x11,0x11,0x11,0x11,0x11,0x1f};
+byte batt20[8]    = {0x0e,0x1f,0x11,0x11,0x11,0x11,0x1f,0x1f};
+byte batt40[8]    = {0x0e,0x1f,0x11,0x11,0x11,0x1f,0x1f,0x1f};
+byte batt60[8]    = {0x0e,0x1f,0x11,0x11,0x1f,0x1f,0x1f,0x1f};
+byte batt80[8]    = {0x0e,0x1f,0x11,0x1f,0x1f,0x1f,0x1f,0x1f};
+byte batt100[8]   = {0x0e,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
+byte battover[8]  = {0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
+
+// array of references to the 8 'battery symbol' characters
+byte *batt_syms[] = {battunder, batt00, batt20, batt40, batt60, batt80, batt100, battover};
+
+//-----
 // Events and the event queue.
 //-----
 
@@ -169,6 +187,9 @@ enum Mode
 //-----
 // Miscellaneous.
 //-----
+
+// milliseconds delay between measuring battery voltage
+const int VoltageDelay = 30000;
 
 // stuff for the calibrate action
 const int MinClockOffset = -32000;
@@ -210,6 +231,12 @@ int LcdBrightness = DefaultLcdBrightness;
 
 // adjustment value for DDS-60 (set in 'Calibrate' menu)
 int VfoClockOffset = 0;
+
+// global pointing to symbol for current battery state
+byte *BatterySymbol = battunder;
+
+// the latest measured voltage
+float MeasuredVoltage = -1.0;
 
 
 //##############################################################################
@@ -530,6 +557,7 @@ void vfo_display_mode(void)
 //     DBG;         get display brightness
 //     DCSn;        set display contrast to N (0, 128)
 //     DCG;         get display contrast
+//     VG;          get measured battery voltage
 //##############################################################################
 
 //----------------------------------------
@@ -947,6 +975,48 @@ const char * xcmd_presentation(char *answer, char *cmd)
 }
 
 //----------------------------------------
+// Convert a positive float < 10.0 to a string with 2 decimal places.
+//     buff         address of buffer to fill
+//     value        the float value to convert
+//----------------------------------------
+
+void float2str(char *buff, float value)
+{
+  int int_value = (int) value;
+  int f_part = (int) ((value - int_value) * 1000);
+  char *ptr = buff;
+  *ptr++ = int_value + '0';
+  *ptr++ = '.';
+  int factor = 100;
+  for (int i = 0; i < 2; ++i)
+  {
+    int digit = f_part / factor;
+    *ptr++ = digit + '0';
+    f_part -= digit * factor;
+    factor = factor / 10;
+  }
+}
+
+//----------------------------------------
+// Battery Voltage:
+//     VG;  get the measured battery voltage
+//----------------------------------------
+
+const char * xcmd_voltage(char *answer, char *cmd)
+{
+  switch (cmd[1])
+  {
+    case 'G':
+      float2str(answer, MeasuredVoltage);
+      answer[4] = '\0';
+      strcat(answer, (char *) F("v"));
+      return answer;
+  }
+
+  return "ERROR";
+}
+
+//----------------------------------------
 // Process an external command.
 //     cmd     address of command string buffer
 //     index   index of last char in string buffer
@@ -985,6 +1055,8 @@ const char * do_external_cmd(char *answer, char *cmd, int index)
       return xcmd_mode(answer, cmd);
     case 'P':
       return xcmd_presentation(answer, cmd);
+    case 'V':
+      return xcmd_voltage(answer, cmd);
   }
 
   return xcmd_help(answer, cmd);
@@ -1350,6 +1422,22 @@ void event_dump_queue(const char *msg)
 //##############################################################################
 // Utility routines for the display.
 //##############################################################################
+
+//----------------------------------------
+// Display a battery symbol on the screen.
+//
+// The global BatterySymbol points to the appropriate byte array for the symbol.
+//----------------------------------------
+
+void display_battery(void)
+{
+  // create special battery character
+  lcd.createChar(BatteryChar, BatterySymbol);
+
+  // we set cursor here because we lose cursor position after lcd.createChar()!?
+  lcd.setCursor(15, 1);
+  lcd.write(byte(BatteryChar));
+}
 
 //----------------------------------------
 // Display a value on the display with selected column underlined.
@@ -2891,8 +2979,40 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 // Standard Arduino loop() function.
 //----------------------------------------
 
+const float MaxVoltage = 8.0;   // battery voltage for "100% full"
+const float MinVoltage = 7.0;   // battery voltage for "0% full"
+
 void loop(void)
 {
+  // measure voltage every second
+  // we will get a value of 1023 for 3.3 volts
+  static UINT last_volts_time = -VoltageDelay;    // millis() value last time we measured
+  ULONG now = millis();
+  if (now < last_volts_time)
+    last_volts_time = -VoltageDelay;    // handle wraparound of millis()
+  if (now > last_volts_time + VoltageDelay)
+  {
+    last_volts_time = now;
+    UINT measured = analogRead(mc_BattVolts);
+    MeasuredVoltage = ((3.3 * measured) / 1023) * (32.0/10.0);
+
+    // figure out which battery symbol to use
+    if (MeasuredVoltage < MinVoltage)
+        BatterySymbol = battunder;
+    else if (MeasuredVoltage > MaxVoltage)
+        BatterySymbol = battover;
+    else
+    {
+      int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
+      int batt_bucket = (int) (percent/20);
+#if (DEBUG & DEBUG_BATT)
+      Serial.printf(F("volts=%f, percent=%d, batt_bucket=%d\n"), MeasuredVoltage, percent, batt_bucket);
+#endif
+      BatterySymbol = batt_syms[batt_bucket + 2];
+    }
+    display_battery();
+  }
+  
   // gather any commands from controller
   while (Serial.available()) 
   {
@@ -2926,17 +3046,11 @@ void loop(void)
     switch (event)
     {
       case vfo_RLeft:
-#if DEBUG
-        Serial.printf(F("got RLeft, VfoFrequency=%ld, VfoSelectDigit=%d\n"), VfoFrequency, VfoSelectDigit);
-#endif
         if (VfoFrequency <= MinFreq)
           break;
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MinFreq)
           VfoFrequency = MinFreq;
-#if DEBUG
-        Serial.printf(F("after RLeft, VfoFrequency=%ld\n"), VfoFrequency);
-#endif
         break;
       case vfo_RRight:
         if (VfoFrequency >= MaxFreq)
@@ -2972,6 +3086,7 @@ void loop(void)
 
     // update the display
     display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
+    display_battery();
 
     // if online, update DDS-60 and write changes to EEPROM
 #if (DEBUG & DEBUG_FREQ)
