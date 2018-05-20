@@ -73,10 +73,6 @@ const int re_pinA = 3;     // encoder A pin
 const int re_pinB = 2;     // encoder B pin
 
 // define microcontroller pins that control the DDS-60
-//const byte DDS_FQ_UD = 14;    // connected to AD9851 device select pin
-//const byte DDS_W_CLK = 15;    // connected to AD9851 clock pin
-//const byte DDS_DATA = 16;     // connected to AD9851 D7 (serial data) pin 
-
 const byte DDS_FQ_UD = 16;    // connected to AD9851 device select pin
 const byte DDS_W_CLK = 15;    // connected to AD9851 clock pin
 const byte DDS_DATA = 14;     // connected to AD9851 D7 (serial data) pin 
@@ -543,25 +539,25 @@ void vfo_display_mode(void)
 
 const char * xcmd_help(char *answer, char *cmd)
 {
-  strcpy(answer, "-----------Interactive Commands-----------------\n");
-  strcat(answer, "H;           send help text to console\n");
-  strcat(answer, "BH;          boot hard, reload software via USB\n");
-  strcat(answer, "BS;          boot soft, restart program\n");
-  strcat(answer, "ID;          get device identifier string\n");
-  strcat(answer, "MO;          set VFO mode to 'online'\n");
-  strcat(answer, "MS;          set VFO mode to 'standby'\n");
-  strcat(answer, "MG;          get VFO mode\n");
-  strcat(answer, "FSnnnnnnnn;  set frequency to 'nnnnnnnn'\n");
-  strcat(answer, "FG;          get frequency\n");
-  strcat(answer, "CSn;         set cursor to index 'n'\n");
-  strcat(answer, "CG;          get cursor index\n");
-  strcat(answer, "DS+n;        increment display selected digit by 'n'\n");
-  strcat(answer, "DS-n;        decrement display selected digit by 'n'\n");
-  strcat(answer, "PBSn;        set presentation brightness to N (0, 15)\n");
-  strcat(answer, "PBG;         get presentation brightness\n");
-  strcat(answer, "PCSn;        set presentation contrast to N (0, 15)\n");
-  strcat(answer, "PCG;         get presentation contrast\n");
-  strcat(answer, "------------------------------------------------\n");
+  strcpy(answer, (char *) F("\n-----------Interactive Commands-----------------\n"));
+  strcat(answer, (char *) F("H;           send help text to console\n"));
+  strcat(answer, (char *) F("BH;          boot hard, reload software via USB\n"));
+  strcat(answer, (char *) F("BS;          boot soft, restart program\n"));
+  strcat(answer, (char *) F("ID;          get device identifier string\n"));
+  strcat(answer, (char *) F("MO;          set VFO mode to 'online'\n"));
+  strcat(answer, (char *) F("MS;          set VFO mode to 'standby'\n"));
+  strcat(answer, (char *) F("MG;          get VFO mode\n"));
+  strcat(answer, (char *) F("FSnnnnnnnn;  set frequency to 'nnnnnnnn'\n"));
+  strcat(answer, (char *) F("FG;          get frequency\n"));
+  strcat(answer, (char *) F("CSn;         set cursor to index 'n'\n"));
+  strcat(answer, (char *) F("CG;          get cursor index\n"));
+  strcat(answer, (char *) F("DS+n;        increment display selected digit by 'n'\n"));
+  strcat(answer, (char *) F("DS-n;        decrement display selected digit by 'n'\n"));
+  strcat(answer, (char *) F("PBSnn;       set presentation brightness to N [1, 16]\n"));
+  strcat(answer, (char *) F("PBG;         get presentation brightness\n"));
+  strcat(answer, (char *) F("PCSnn;       set presentation contrast to N [1, 16]\n"));
+  strcat(answer, (char *) F("PCG;         get presentation contrast\n"));
+  strcat(answer, (char *) F("------------------------------------------------\n"));
   return answer;
 }
 
@@ -857,8 +853,6 @@ int contrast_value2index(int value)
 
 const char * xcmd_presentation(char *answer, char *cmd)
 {
-  Serial.printf(F("xcmd_presentation: cmd='%s'\n"), cmd);
-
   switch (cmd[1])
   {
     case 'B':
@@ -885,8 +879,6 @@ const char * xcmd_presentation(char *answer, char *cmd)
               return "ERROR";
             LcdBrightness = brightness_index2value(b_index);
             analogWrite(mc_Brightness, LcdBrightness);
-            Serial.printf(F("xcmd_presentation: set brightness to %d, value=%d\n"),
-                          LcdBrightness, b_index);
             return "OK";
         }
 
@@ -931,15 +923,12 @@ const char * xcmd_presentation(char *answer, char *cmd)
               return "ERROR";
             LcdContrast = contrast_index2value(c_index);
             analogWrite(mc_Contrast, LcdContrast);
-            Serial.printf(F("xcmd_presentation: set contrast to %d, index=%d\n"),
-                          LcdContrast, c_index);
             return "OK";
           }
           
         case 'G':
           // get contrast
           int c_index = contrast_value2index(LcdContrast);
-          Serial.printf(F("PCG: LcdContrast=%d, c_index=%d\n"), LcdContrast, c_index);
           if (c_index > 9)
           {
             ulong2str(answer, 2, (int) c_index);
@@ -2011,7 +2000,7 @@ void setup(void)
 
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
-  analogWrite(mc_Brightness, LcdBrightness);
+  analogWrite(mc_Brightness, 0);    // display off while initializing
   analogWrite(mc_Contrast, LcdContrast);
 
   // initialize the display
@@ -2082,6 +2071,7 @@ void setup(void)
   Serial.printf(F("Preparing screen ... "));
 
   // show program name and version number
+  analogWrite(mc_Brightness, LcdBrightness);    // display ON for banner
   banner();
 
   // eat any events that may have been generated
@@ -2918,7 +2908,7 @@ void loop(void)
       char answer[2048];
       
       CommandBuffer[CommandIndex] = '\0';
-      Serial.printf(F("%s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
+      Serial.printf(F(">>> %s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
     }
   }
