@@ -157,9 +157,10 @@ byte batt60[8]    = {0x0e,0x1f,0x11,0x11,0x1f,0x1f,0x1f,0x1f};
 byte batt80[8]    = {0x0e,0x1f,0x11,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte batt100[8]   = {0x0e,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte battover[8]  = {0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
+byte battnone[8]  = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
 // array of references to the 8 'battery symbol' characters
-byte *batt_syms[] = {battunder, batt00, batt20, batt40, batt60, batt80, batt100, battover};
+byte *batt_syms[] = {battunder, batt00, batt20, batt40, batt60, batt80, batt100, battover, battnone};
 
 //-----
 // Events and the event queue.
@@ -197,12 +198,17 @@ enum Mode
 //-----
 
 // milliseconds delay between measuring battery voltage
+//const int VoltageDelay = 1000;
 const int VoltageDelay = 30000;
 
 // stuff for the calibrate action
 const int MinClockOffset = -32000;
 const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
+
+// battery voltage limits
+const float MaxVoltage = 8.2;   // battery voltage for "100% full"
+const float MinVoltage = 6.4;   // battery voltage for "0% full"
 
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
@@ -2533,6 +2539,7 @@ void brightness_action(struct Menu *menu, int item_num)
           break;
         case vfo_HoldClick:
           LcdBrightness = old_brightness;
+          analogWrite(mc_Brightness, LcdBrightness);
           event_flush();
           return;
         default:
@@ -2991,13 +2998,10 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 // Standard Arduino loop() function.
 //----------------------------------------
 
-const float MaxVoltage = 8.2;   // battery voltage for "100% full"
-const float MinVoltage = 6.4;   // battery voltage for "0% full"
-
 void loop(void)
 {
 #if INC_BATTERY
-  // measure voltage every second
+  // measure voltage every whenever
   // we will get a value of 1023 for 3.3 volts
   static UINT last_volts_time = -VoltageDelay;    // millis() value last time we measured
   ULONG now = millis();
@@ -3009,19 +3013,30 @@ void loop(void)
     UINT measured = analogRead(mc_BattVolts);
     MeasuredVoltage = ((3.3 * measured) / 1023) * (32.0/10.0);
 
+#if (DEBUG & DEBUG_BATT)
+      Serial.printf(F("raw volts=%d\n"), measured);
+#endif
+
     // figure out which battery symbol to use
     if (MeasuredVoltage < MinVoltage)
+    {
         BatterySymbol = battunder;
+        if (MeasuredVoltage < 1.0)
+        {
+          BatterySymbol = battnone;
+        }
+    }
     else if (MeasuredVoltage > MaxVoltage)
         BatterySymbol = battover;
     else
     {
       int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
       int batt_bucket = (int) (percent/20);
-#if (DEBUG & DEBUG_BATT)
-      Serial.printf(F("volts=%f, percent=%d, batt_bucket=%d\n"), MeasuredVoltage, percent, batt_bucket);
-#endif
       BatterySymbol = batt_syms[batt_bucket + 2];
+#if (DEBUG & DEBUG_BATT)
+      Serial.printf(F("actual volts=%f, percent=%d, batt_bucket=%d\n"),
+                      MeasuredVoltage, percent, batt_bucket);
+#endif
     }
     display_battery();
   }
