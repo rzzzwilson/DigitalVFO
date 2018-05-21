@@ -15,12 +15,6 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
-//-----
-// Conditional compile flags
-//-----
-
-#define INC_BATTERY   1
-
 // debug bit masks:
 #define DEBUG_DDS     (1 << 0)
 #define DEBUG_FREQ    (1 << 1)
@@ -30,9 +24,7 @@
 #define DEBUG_RE      (1 << 5)
 #define DEBUG_INT     (1 << 6)
 #define DEBUG_DISP    (1 << 7)
-#if INC_BATTERY
 #define DEBUG_BATT    (1 << 8)
-#endif
 
 #define DEBUG         (DEBUG_BATT)
 //#define DEBUG         0
@@ -198,8 +190,9 @@ enum Mode
 //-----
 
 // milliseconds delay between measuring battery voltage
-//const int VoltageDelay = 1000;
-const int VoltageDelay = 30000;
+const long MeasureVoltageDelay = 1000;
+// number of measure periods before report (if wanted in DEBUG)
+const long ReportVoltageDelay = 30;
 
 // stuff for the calibrate action
 const int MinClockOffset = -32000;
@@ -347,10 +340,8 @@ void decode_debug_levels(int debug)
     Serial.println("    DEBUG_INT\tbit is set");
   if (debug & DEBUG_DISP)
     Serial.println("    DEBUG_DISP\tbit is set");
-#if INC_BATTERY
   if (debug & DEBUG_BATT)
     Serial.println("    DEBUG_BATT\tbit is set");
-#endif
 }
 
 //----------------------------------------
@@ -2197,7 +2188,7 @@ void show_main_screen(void)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Vfo:");
+  lcd.print("Freq:");
   display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
   lcd.print("Hz");
 
@@ -2993,56 +2984,90 @@ struct MenuItem mi_credits = {"Credits", NULL, &credits_action};
 struct MenuItem *mia_main[] = {&mi_slots, &mi_settings, &mi_reset, &mi_credits};
 struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 
-
 //----------------------------------------
-// Standard Arduino loop() function.
+// Measure the battery voltage.
+// We measure every "MeasureVoltageDelay" milliseconds, update the battery symbol.
+// If DEBUG reporting is turned on, we report every "ReportVoltageDelay" measurements.
 //----------------------------------------
 
-void loop(void)
+void measure_battery(void)
 {
-#if INC_BATTERY
-  // measure voltage every whenever
-  // we will get a value of 1023 for 3.3 volts
-  static UINT last_volts_time = -VoltageDelay;    // millis() value last time we measured
-  ULONG now = millis();
-  if (now < last_volts_time)
-    last_volts_time = -VoltageDelay;    // handle wraparound of millis()
-  if (now > last_volts_time + VoltageDelay)
+  // get the time since the last measurement
+  static long last_volts_time = -MeasureVoltageDelay;    // millis() value last time we measured
+  long now_milli = millis();
+  if (now_milli < last_volts_time)
+    last_volts_time = -MeasureVoltageDelay;    // handle wraparound of millis()
+
+  // if not time yet, return
+  if (now_milli < last_volts_time + MeasureVoltageDelay)
+    return;
+
+  // measuring, set measurement time to "now"
+  last_volts_time = now_milli;
+      
+  // measure voltage, we will get a value of 1023 for 3.3 volts
+  UINT measured = analogRead(mc_BattVolts);
+  MeasuredVoltage = ((3.3 * measured) / 1023) * (32.0/10.0);
+
+#if (DEBUG & DEBUG_BATT)
+  static int batt_report_count = 0;
+  if (++batt_report_count > 0)
   {
-    last_volts_time = now;
-    UINT measured = analogRead(mc_BattVolts);
-    MeasuredVoltage = ((3.3 * measured) / 1023) * (32.0/10.0);
-
-#if (DEBUG & DEBUG_BATT)
-      Serial.printf(F("raw volts=%d\n"), measured);
-#endif
-
-    // figure out which battery symbol to use
-    if (MeasuredVoltage < MinVoltage)
-    {
-        BatterySymbol = battunder;
-        if (MeasuredVoltage < 1.0)
-        {
-          BatterySymbol = battnone;
-        }
-    }
-    else if (MeasuredVoltage > MaxVoltage)
-        BatterySymbol = battover;
-    else
-    {
-      int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
-      int batt_bucket = (int) (percent/20);
-      BatterySymbol = batt_syms[batt_bucket + 2];
-#if (DEBUG & DEBUG_BATT)
-      Serial.printf(F("actual volts=%f, percent=%d, batt_bucket=%d\n"),
-                      MeasuredVoltage, percent, batt_bucket);
-#endif
-    }
-    display_battery();
+    Serial.printf(F("raw volts=%d, "), measured);
   }
 #endif
 
-  // gather any commands from controller
+  // figure out which battery symbol to use
+  if (MeasuredVoltage < MinVoltage)
+  {
+    if (MeasuredVoltage < 1.0)
+    {
+      BatterySymbol = battnone;
+#if (DEBUG & DEBUG_BATT)
+      if (batt_report_count > 0)
+        Serial.printf(F("no battery\n"));
+#endif      
+    }
+    else
+    {
+      BatterySymbol = battunder;
+#if (DEBUG & DEBUG_BATT)
+      if (batt_report_count > 0)
+        Serial.printf(F("battery under voltage\n"));
+#endif      
+    }
+  }
+  else if (MeasuredVoltage > MaxVoltage)
+  {
+    BatterySymbol = battover;
+#if (DEBUG & DEBUG_BATT)
+    if (batt_report_count > 0)
+      Serial.printf(F("battery over voltage\n"));
+#endif      
+  }
+  else
+  {
+    int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
+    int batt_bucket = (int) (percent/20);
+    BatterySymbol = batt_syms[batt_bucket + 2];
+#if (DEBUG & DEBUG_BATT)
+    if (batt_report_count > 0)
+    {
+      Serial.printf(F("actual volts=%f, percent=%d, batt_bucket=%d\n"),
+                      MeasuredVoltage, percent, batt_bucket);
+      batt_report_count = -ReportVoltageDelay;
+    }
+#endif
+  }
+}
+
+//----------------------------------------
+// Do any commands from the external controller.
+//----------------------------------------
+
+void do_external_commands(void)
+{
+  // gather any commands from the external controller
   while (Serial.available()) 
   {
     char ch = Serial.read();
@@ -3057,21 +3082,28 @@ void loop(void)
       char answer[2048];
       
       CommandBuffer[CommandIndex] = '\0';
-      Serial.printf(F(">>> %s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
+      Serial.printf(F("%s >>> %s\n"),
+                    CommandBuffer, do_external_cmd(answer, CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
     }
   }
-  
-  // handle all events in the queue
+}
+
+//----------------------------------------
+// Handle events from the rotary encoder.
+//----------------------------------------
+
+void handle_RE_events()
+{
   while (event_pending() > 0)
   {
     // get next event and handle it
     VFOEvent event = event_pop();
-
-#if (DEBUG & DEBUG_EVENT)
-    Serial.printf(F("loop: event=%s\n"), event2display(event));
-#endif
-
+  
+  #if (DEBUG & DEBUG_EVENT)
+    Serial.printf(F("handle_RE_events: event=%s\n"), event2display(event));
+  #endif
+  
     switch (event)
     {
       case vfo_RLeft:
@@ -3112,22 +3144,36 @@ void loop(void)
         // unrecognized event, ignore
         break;
     }
+  }
+}
 
-    // update the display
-    display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
-#if INC_BATTERY
-    display_battery();
-#endif
+//----------------------------------------
+// Standard Arduino loop() function.
+//----------------------------------------
 
-    // if online, update DDS-60 and write changes to EEPROM
-#if (DEBUG & DEBUG_FREQ)
+void loop(void)
+{
+  // do any external commands
+  do_external_commands();
+  
+  // handle all events in the queue
+  handle_RE_events();
+
+  // check the battery
+  measure_battery();
+  
+  // update the display
+  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
+  display_battery();
+
+  #if (DEBUG & DEBUG_FREQ)
     Serial.printf(F("Main loop: VfoFrequency=%ld\n"), VfoFrequency);
-#endif
-
-    if (VfoMode == vfo_Online)
-    {
-      save_to_eeprom();
-      dds_update(VfoFrequency);
-    }
+  #endif
+  
+  // if online, update DDS-60 and write changes to EEPROM
+  if (VfoMode == vfo_Online)
+  {
+    save_to_eeprom();
+    dds_update(VfoFrequency);
   }
 }
