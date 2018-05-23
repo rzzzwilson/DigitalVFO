@@ -200,8 +200,8 @@ const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
 // battery voltage limits
-const float MaxVoltage = 8.2;   // battery voltage for "100% full"
-const float MinVoltage = 6.4;   // battery voltage for "0% full"
+const float MaxVoltage = 8.3;   // battery voltage for "100% full"
+const float MinVoltage = 6.1;   // battery voltage for "0% full"
 
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
@@ -2072,6 +2072,9 @@ void dds_setup(void)
 
 void setup(void)
 {
+  // initialize the serial console
+  Serial.begin(115200);
+
 #if (DEBUG > 0)
   Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
   decode_debug_levels(DEBUG);
@@ -2084,9 +2087,6 @@ void setup(void)
   for (int i = 0; i < NumCols; ++i)
     BlankRow[i] = ' ';
   BlankRow[NumCols] = '\0';     // don't forget the string terminator
-
-  // initialize the serial console
-  Serial.begin(115200);
 
   // VFO wakes up in standby mode
   VfoMode = vfo_Standby;
@@ -2990,6 +2990,8 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 // If DEBUG reporting is turned on, we report every "ReportVoltageDelay" measurements.
 //----------------------------------------
 
+int batt_report_count = 0;
+  
 void measure_battery(void)
 {
   // get the time since the last measurement
@@ -3007,10 +3009,9 @@ void measure_battery(void)
       
   // measure voltage, we will get a value of 1023 for 3.3 volts
   UINT measured = analogRead(mc_BattVolts);
-  MeasuredVoltage = ((3.3 * measured) / 1023) * (32.0/10.0);
+  MeasuredVoltage = (3.3 * measured) / 1023 * 32.0/10.0;
 
 #if (DEBUG & DEBUG_BATT)
-  static int batt_report_count = 0;
   if (++batt_report_count > 0)
   {
     Serial.printf(F("raw volts=%d, "), measured);
@@ -3055,10 +3056,14 @@ void measure_battery(void)
     {
       Serial.printf(F("actual volts=%f, percent=%d, batt_bucket=%d\n"),
                       MeasuredVoltage, percent, batt_bucket);
-      batt_report_count = -ReportVoltageDelay;
     }
 #endif
   }
+
+#if (DEBUG & DEBUG_BATT)
+  if (batt_report_count > 0)
+    batt_report_count = -ReportVoltageDelay;
+#endif
 }
 
 //----------------------------------------
