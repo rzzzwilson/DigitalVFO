@@ -15,24 +15,28 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
-// debug bit masks:
-#define DEBUG_DDS     (1 << 0)
-#define DEBUG_FREQ    (1 << 1)
-#define DEBUG_MENU    (1 << 2)
-#define DEBUG_EVENT   (1 << 3)
-#define DEBUG_ACT     (1 << 4)
-#define DEBUG_RE      (1 << 5)
-#define DEBUG_INT     (1 << 6)
-#define DEBUG_DISP    (1 << 7)
-#define DEBUG_BATT    (1 << 8)
 
-#define DEBUG         (DEBUG_BATT)
-//#define DEBUG         0
+//-----------------
+// debug bit masks
+//-----------------
+#define DEBUG_DDS     (1 << 0)  // DDS debug
+#define DEBUG_FREQ    (1 << 1)  // frequency stuff
+#define DEBUG_MENU    (1 << 2)  // menu
+#define DEBUG_EVENT   (1 << 3)  // virtual events
+#define DEBUG_ACT     (1 << 4)  // actions
+#define DEBUG_RE      (1 << 5)  // rotary encoder
+#define DEBUG_INT     (1 << 6)  // interrupts
+#define DEBUG_DISP    (1 << 7)  // display
+#define DEBUG_BATT    (1 << 8)  // battery
+
+// DEBUG word for debugging program - bitmask values
+//#define DEBUG         (DEBUG_EVENT)
+#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.4";
-const char *MinorVersion = ".0";
+const char *MinorVersion = ".1";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -69,9 +73,9 @@ const byte mc_Contrast = 6;
 const byte mc_BattVolts = 19;
 
 // define microcontroller pins connected to the rotary encoder
-const int re_pinPush = 4;  // encoder pushbutton pin
-const int re_pinA = 3;     // encoder A pin
-const int re_pinB = 2;     // encoder B pin
+const int re_pinPush = 4;     // encoder pushbutton pin
+const int re_pinA = 3;        // encoder A pin
+const int re_pinB = 2;        // encoder B pin
 
 // define microcontroller pins that control the DDS-60
 const byte DDS_FQ_UD = 16;    // connected to AD9851 device select pin
@@ -258,14 +262,16 @@ float MeasuredVoltage = -1.0;
 /* restart the Teensy, without invoking bootloader. */
 void restart(void)
 {
-  // 0000101111110100000000000000100
-  // Assert [2]SYSRESETREQ
+  Serial.printf(F("Restarting ...\n"));
+  delay(500);
   WRITE_RESTART(0x5FA0004);  
 }
 
 /* reboot the Teensy, invoking bootloader. */
 void reboot(void)
 {
+  Serial.printf(F("Rebooting ...\n"));
+  delay(500);
   _reboot_Teensyduino_();
 }
 
@@ -397,10 +403,10 @@ void banner(void)
   for (int i = LcdBrightness; i; --i)
   {
     analogWrite(mc_Brightness, i);
-    delay(15);
+    delay(20);
   }
   lcd.clear();
-  delay(400);
+  delay(200);
   analogWrite(mc_Brightness, LcdBrightness);
 }
 
@@ -535,8 +541,6 @@ void str2upper(char *str)
 
 void vfo_display_mode(void)
 {
-// FIXME: if we display something else on bottom row change this code!
-
   // clear row 1 and write new mode string
   lcd.setCursor(0, 1);
   lcd.write(BlankRow);
@@ -553,19 +557,11 @@ void vfo_display_mode(void)
 //     BH;          boot hard, reload software via USB
 //     BS;          boot soft, restart program
 //     ID;          get device identifier string
-//     MSO;         set VFO mode to 'online'
-//     MSS;         set VFO mode to 'standby'
+//     MO;          set VFO mode to 'online'
+//     MS;          set VFO mode to 'standby'
 //     MG;          get VFO mode
 //     FSnnnnnnnn;  set frequency to 'nnnnnnnn'
 //     FG;          get frequency
-//     CSn;         set cursor to index 'n'
-//     CG;          get cursor index
-//     DS+n;        increment display selected digit by 'n'
-//     DS-n;        decrement display selected digit by 'n'
-//     DBSn;        set display brightness to N (0, 128)
-//     DBG;         get display brightness
-//     DCSn;        set display contrast to N (0, 128)
-//     DCG;         get display contrast
 //     VG;          get measured battery voltage
 //##############################################################################
 
@@ -586,21 +582,13 @@ const char * xcmd_help(char *answer, char *cmd)
   strcat(answer, (char *) F("MG;          get VFO mode\n"));
   strcat(answer, (char *) F("FSnnnnnnnn;  set frequency to 'nnnnnnnn'\n"));
   strcat(answer, (char *) F("FG;          get frequency\n"));
-  strcat(answer, (char *) F("CSn;         set cursor to index 'n'\n"));
-  strcat(answer, (char *) F("CG;          get cursor index\n"));
-  strcat(answer, (char *) F("DS+n;        increment display selected digit by 'n'\n"));
-  strcat(answer, (char *) F("DS-n;        decrement display selected digit by 'n'\n"));
-  strcat(answer, (char *) F("PBSnn;       set presentation brightness to N [1, 16]\n"));
-  strcat(answer, (char *) F("PBG;         get presentation brightness\n"));
-  strcat(answer, (char *) F("PCSnn;       set presentation contrast to N [1, 16]\n"));
-  strcat(answer, (char *) F("PCG;         get presentation contrast\n"));
   strcat(answer, (char *) F("------------------------------------------------\n"));
   return answer;
 }
 
 //----------------------------------------
 // Boot:
-//     BR;  boot, reload software via USB
+//     BH;  boot, reload software via USB
 //     BS;  boot soft, restart program
 //----------------------------------------
 
@@ -612,7 +600,6 @@ const char * xcmd_boot(char *answer, char *cmd)
   switch (cmd[1])
   {
     case 'H':
-      // hard reboot DOESN'T SEEM TO WORK YET, not reloading from IDE?
       reboot();
       return "Doing hard reboot";
     case 'S':
@@ -643,8 +630,8 @@ const char * xcmd_id(char *answer, char *cmd)
 
 //----------------------------------------
 // Mode commands:
-//     MSO;
-//     MSS;
+//     MO;
+//     MS;
 //     MG;
 //----------------------------------------
 
@@ -721,269 +708,6 @@ const char * xcmd_freq(char *answer, char *cmd)
 }
 
 //----------------------------------------
-// Cursor commands:
-//     CSn;  set cursor index to 'n'
-//     CG;   get cursor index
-//----------------------------------------
-
-const char * xcmd_cursor(char *answer, char *cmd)
-{
-  switch (cmd[1])
-  {
-    case 'G':
-      // return cursor index
-      if (strlen(cmd) == 3)
-      {
-        answer[0] = VfoSelectDigit + '0';
-        answer[1] = '\0';
-        return answer;
-      }
-      break;
-    case 'S':
-      if (strlen(cmd) == 4)
-      {
-        char *result_ptr = cmd + 2;
-
-        int new_index = *result_ptr - '0';
-        if (new_index <= 7)
-        {
-          VfoSelectDigit = new_index;
-          display_sel_value(VfoFrequency, VfoSelectDigit,
-                            NumFreqChars, NumCols - NumFreqChars - 2, 0);
-          return "OK";
-        }
-      }
-      break;
-  }
-  
-  return "ERROR";
-}
-
-//----------------------------------------
-// Digit commands:
-//     DS+n;        increment frequency digit by 'n'
-//     DS-n;        decrement frequency digit by 'n'
-//----------------------------------------
-
-const char * xcmd_digit(char *answer, char *cmd)
-{
-  switch (cmd[1])
-  {
-    case 'S':
-      if (strlen(cmd) == 5)
-      {
-        char sign = *(cmd + 2);
-
-        if (sign == '+' || sign == '-')
-        {
-          int inc = *(cmd + 3) - '0';
-
-          if (inc >= 0 && inc <= 9)
-          {
-            if (sign == '+')
-            {
-              while (inc--)
-              {
-                VfoFrequency += offset2bump[VfoSelectDigit];
-              }
-              if (VfoFrequency > MaxFreq)
-                VfoFrequency = MaxFreq;
-              display_sel_value(VfoFrequency, VfoSelectDigit,
-                                NumFreqChars, NumCols - NumFreqChars - 2, 0);
-            }
-            else
-            {
-              while (inc--)
-              {
-                VfoFrequency -= offset2bump[VfoSelectDigit];
-              }
-              if (VfoFrequency < MinFreq)
-                VfoFrequency = MinFreq;
-              display_sel_value(VfoFrequency, VfoSelectDigit,
-                                NumFreqChars, NumCols - NumFreqChars - 2, 0);
-            }
-            return "OK";
-          }
-        }
-      }
-      break;
-  }
-  
-  return "ERROR";
-}
-
-//----------------------------------------
-// Convert a brightness 'index' to a brightness value.
-//
-//     index  brightness index in [1, 16]
-//
-// Returns the brightness value in range [15, 255], step 16.
-//----------------------------------------
-int brightness_index2value(int index)
-{
-  // clamp 'index' to range [1, 16]
-  if (index < 1) index = 1;
-  if (index > 16) index = 16;
-
-  // return the appropriate value
-  return index * 16 - 1;
-}
-
-//----------------------------------------
-// Convert a brightness value to a brightness 'index'.
-//
-//     value  brightness value in the range [15, 255], step 16
-//
-// Returns the brightness index in range [1, 16].
-//----------------------------------------
-int brightness_value2index(int value)
-{
-  // clamp 'value' to canonical value in range [15, 255], step 10
-  if (value < 15) value = 15;
-  if (value > 255) value = 255;
-  value = ((value + 1) / 16) * 16 - 1;
-  
-  return (value + 16) / 16;
-}
-
-//----------------------------------------
-// Convert a contrast 'index' to a contrast value.
-//
-//     index  contrast index in [0, 15]
-//
-// Returns the contrast value in range [0, 150], step 10.
-//----------------------------------------
-int contrast_index2value(int index)
-{
-  // clamp 'index' to range [0, 15]
-  if (index < 0) index = 0;
-  if (index > 15) index = 15;
-
-  // return the appropriate value
-  return index * 10;
-}
-
-//----------------------------------------
-// Convert a contrast value to a contrast 'index'.
-//
-//     value  contrast value in the range [0, 150], step 10
-//
-// Returns the contrast index in range [0, 15].
-//----------------------------------------
-int contrast_value2index(int value)
-{
-  // clamp 'value' to canonical value in range [0, 150], step 10
-  if (value < 0) value = 0;
-  if (value > 150) value = 150;
-  value = (value / 10) * 10;
-  
-  return value / 10;
-}
-
-//----------------------------------------
-// Display:
-//     PBSn;  presentation brightness set to N [1, 16]
-//     PBG;   get presentation brightness
-//     PCSn;  presentation contrast set to N [0, 15]
-//     PCG;   get presentation contrast
-//----------------------------------------
-
-const char * xcmd_presentation(char *answer, char *cmd)
-{
-  switch (cmd[1])
-  {
-    case 'B':
-      // brightness
-      switch (cmd[2])
-      {
-        case 'S':
-        {
-            // set brightness
-            char *ch_ptr = cmd + 3;
-  
-            while (*ch_ptr != ';')
-            {
-              char ch = *ch_ptr++;
-    
-              if (ch < '0' || ch > '9')
-              {
-                return "ERROR";
-              }
-            }
-            *ch_ptr = '\0';    // remove terminating ';'
-            int b_index = (int) str2ulong(cmd+3);
-            if ((b_index < 1) || (b_index > 16))
-              return "ERROR";
-            LcdBrightness = brightness_index2value(b_index);
-            analogWrite(mc_Brightness, LcdBrightness);
-            return "OK";
-        }
-
-        case 'G':
-          // get brightness
-          int b_index = brightness_value2index(LcdBrightness);
-          Serial.printf(F("PBG: LcdBrightness=%d, b_index=%d\n"), LcdBrightness, b_index);
-          if (b_index > 9)
-          {
-            ulong2str(answer, 2, (int) b_index);
-            answer[2] = '\0';
-          }
-          else
-          {
-            ulong2str(answer, 1, (int) b_index);
-            answer[1] = '\0';
-          }
-          return answer;
-      }
-
-    case 'C':
-      // contrast
-      switch (cmd[2])
-      {
-        case 'S':
-          {
-            // set contrast
-            char *ch_ptr = cmd + 3;
-  
-            while (*ch_ptr != ';')
-            {
-              char ch = *ch_ptr++;
-    
-              if (ch < '0' || ch > '9')
-              {
-                return "ERROR";
-              }
-            }
-            *ch_ptr = '\0';    // remove terminating ';'
-            int c_index = (int) str2ulong(cmd+3);
-            if ((c_index < 0) || (c_index > 15))
-              return "ERROR";
-            LcdContrast = contrast_index2value(c_index);
-            analogWrite(mc_Contrast, LcdContrast);
-            return "OK";
-          }
-          
-        case 'G':
-          // get contrast
-          int c_index = contrast_value2index(LcdContrast);
-          if (c_index > 9)
-          {
-            ulong2str(answer, 2, (int) c_index);
-            answer[2] = '\0';
-          }
-          else
-          {
-            ulong2str(answer, 1, (int) c_index);
-            answer[1] = '\0';
-          }
-          return answer;      
-      }
-  }
-  
-  return "ERROR";
-}
-
-//----------------------------------------
 // Convert a positive float < 10.0 to a string with 2 decimal places.
 //     buff         address of buffer to fill
 //     value        the float value to convert
@@ -1050,10 +774,6 @@ const char * do_external_cmd(char *answer, char *cmd, int index)
   {
     case 'B':
       return xcmd_boot(answer, cmd);
-    case 'C':
-      return xcmd_cursor(answer, cmd);
-    case 'D':
-      return xcmd_digit(answer, cmd);
     case 'F':
       return xcmd_freq(answer, cmd);
     case 'H':
@@ -1062,8 +782,6 @@ const char * do_external_cmd(char *answer, char *cmd, int index)
       return xcmd_id(answer, cmd);
     case 'M':
       return xcmd_mode(answer, cmd);
-    case 'P':
-      return xcmd_presentation(answer, cmd);
     case 'V':
       return xcmd_voltage(answer, cmd);
   }
@@ -1802,42 +1520,42 @@ void pinB_isr(void)
 #define NEXT_FREE   (0)
 
 // address for Frequency 'frequency'
-const int AddressFreq = NEXT_FREE;
-#define NEXT_FREE   (AddressFreq + sizeof(Frequency))
+const int EepromFreq = NEXT_FREE;
+#define NEXT_FREE   (EepromFreq + sizeof(Frequency))
 
 // address for int 'selected digit'
-const int AddressSelDigit = NEXT_FREE;
-#define NEXT_FREE   (AddressSelDigit + sizeof(SelOffset))
+const int EepromSelDigit = NEXT_FREE;
+#define NEXT_FREE   (EepromSelDigit + sizeof(SelOffset))
 
 // address for 'VfoClockOffset' calibration
-const int AddressVfoClockOffset = NEXT_FREE;
-#define NEXT_FREE   (AddressVfoClockOffset + sizeof(VfoClockOffset))
+const int EepromVfoOffset = NEXT_FREE;
+#define NEXT_FREE   (EepromVfoOffset + sizeof(VfoClockOffset))
 
 // address for byte 'contrast'
-const int AddressContrast = NEXT_FREE;
-#define NEXT_FREE   (AddressContrast + sizeof(LcdContrast))
+const int EepromContrast = NEXT_FREE;
+#define NEXT_FREE   (EepromContrast + sizeof(LcdContrast))
 
 // address for byte 'brightness'
-const int AddressBrightness = NEXT_FREE;
-#define NEXT_FREE   (AddressBrightness + sizeof(LcdBrightness))
+const int EepromBrightness = NEXT_FREE;
+#define NEXT_FREE   (EepromBrightness + sizeof(LcdBrightness))
 
 // address for int 'hold click time'
-const int AddressHoldClickTime = NEXT_FREE;
-#define NEXT_FREE   (AddressHoldClickTime + sizeof(ReHoldClickTime))
+const int EepromHoldClickTime = NEXT_FREE;
+#define NEXT_FREE   (EepromHoldClickTime + sizeof(ReHoldClickTime))
 
 // address for int 'double click time'
-const int AddressDClickTime = NEXT_FREE;
-#define NEXT_FREE   (AddressDClickTime + sizeof(ReDClickTime))
+const int EepromDClickTime = NEXT_FREE;
+#define NEXT_FREE   (EepromDClickTime + sizeof(ReDClickTime))
 
 // number of frequency save slots in EEPROM
 const int NumSaveSlots = 10;
 
-const int SaveFreqBase = NEXT_FREE;
-#define NEXT_FREE   (SaveFreqBase + NumSaveSlots * sizeof(Frequency))
+const int EepromSaveFreqBase = NEXT_FREE;
+#define NEXT_FREE   (EepromSaveFreqBase + NumSaveSlots * sizeof(Frequency))
 
 //also save the offset for each frequency
-const int SaveOffsetBase = NEXT_FREE;
-#define NEXT_FREE   (SaveOffsetBase + NumSaveSlots * sizeof(SelOffset);
+const int EepromSaveOffsetBase = NEXT_FREE;
+#define NEXT_FREE   (EepromSaveOffsetBase + NumSaveSlots * sizeof(SelOffset);
 
 // additional EEPROM saved items go here
 
@@ -1848,13 +1566,13 @@ const int SaveOffsetBase = NEXT_FREE;
 
 void save_to_eeprom(void)
 {
-  EEPROM.put(AddressFreq, VfoFrequency);
-  EEPROM.put(AddressSelDigit, VfoSelectDigit);
-  EEPROM.put(AddressVfoClockOffset, VfoClockOffset);
-  EEPROM.put(AddressBrightness, LcdBrightness);
-  EEPROM.put(AddressContrast, LcdContrast);
-  EEPROM.put(AddressHoldClickTime, ReHoldClickTime);
-  EEPROM.put(AddressDClickTime, ReDClickTime);
+  EEPROM.put(EepromFreq, VfoFrequency);
+  EEPROM.put(EepromSelDigit, VfoSelectDigit);
+  EEPROM.put(EepromVfoOffset, VfoClockOffset);
+  EEPROM.put(EepromBrightness, LcdBrightness);
+  EEPROM.put(EepromContrast, LcdContrast);
+  EEPROM.put(EepromHoldClickTime, ReHoldClickTime);
+  EEPROM.put(EepromDClickTime, ReDClickTime);
 }
 
 //----------------------------------------
@@ -1864,13 +1582,13 @@ void save_to_eeprom(void)
 
 void restore_from_eeprom(void)
 {
-  EEPROM.get(AddressFreq, VfoFrequency);
-  EEPROM.get(AddressSelDigit, VfoSelectDigit);
-  EEPROM.get(AddressVfoClockOffset, VfoClockOffset);
-  EEPROM.get(AddressBrightness, LcdBrightness);
-  EEPROM.get(AddressContrast, LcdContrast);
-  EEPROM.get(AddressHoldClickTime, ReHoldClickTime);
-  EEPROM.get(AddressDClickTime, ReDClickTime);
+  EEPROM.get(EepromFreq, VfoFrequency);
+  EEPROM.get(EepromSelDigit, VfoSelectDigit);
+  EEPROM.get(EepromVfoOffset, VfoClockOffset);
+  EEPROM.get(EepromBrightness, LcdBrightness);
+  EEPROM.get(EepromContrast, LcdContrast);
+  EEPROM.get(EepromHoldClickTime, ReHoldClickTime);
+  EEPROM.get(EepromDClickTime, ReDClickTime);
 }
 
 //----------------------------------------
@@ -1881,8 +1599,8 @@ void restore_from_eeprom(void)
 
 void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
 {
-  int freq_address = SaveFreqBase + slot_num * sizeof(Frequency);
-  int offset_address = SaveOffsetBase + slot_num * sizeof(SelOffset);
+  int freq_address = EepromSaveFreqBase + slot_num * sizeof(Frequency);
+  int offset_address = EepromSaveOffsetBase + slot_num * sizeof(SelOffset);
 
   EEPROM.get(freq_address, freq);
   EEPROM.get(offset_address, offset);
@@ -1896,8 +1614,8 @@ void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
 
 void put_slot(int slot_num, Frequency freq, SelOffset offset)
 {
-  int freq_address = SaveFreqBase + slot_num * sizeof(Frequency);
-  int offset_address = SaveOffsetBase + slot_num * sizeof(SelOffset);
+  int freq_address = EepromSaveFreqBase + slot_num * sizeof(Frequency);
+  int offset_address = EepromSaveOffsetBase + slot_num * sizeof(SelOffset);
 
   EEPROM.put(freq_address, freq);
   EEPROM.put(offset_address, offset);
@@ -1918,17 +1636,17 @@ void dump_eeprom(void)
   UINT hold;
   UINT dclick;
 
-  EEPROM.get(AddressFreq, freq);
-  EEPROM.get(AddressSelDigit, offset);
-  EEPROM.get(AddressVfoClockOffset, clkoffset);
-  EEPROM.get(AddressBrightness, brightness);
-  EEPROM.get(AddressContrast, contrast);
-  EEPROM.get(AddressHoldClickTime, hold);
-  EEPROM.get(AddressDClickTime, dclick);
+  EEPROM.get(EepromFreq, freq);
+  EEPROM.get(EepromSelDigit, offset);
+  EEPROM.get(EepromVfoOffset, clkoffset);
+  EEPROM.get(EepromBrightness, brightness);
+  EEPROM.get(EepromContrast, contrast);
+  EEPROM.get(EepromHoldClickTime, hold);
+  EEPROM.get(EepromDClickTime, dclick);
   
   Serial.printf(F("=================================================\n"));
   Serial.printf(F("dump_eeprom: VfoFrequency=%ld\n"), freq);
-  Serial.printf(F("             AddressSelDigit=%d\n"), offset);
+  Serial.printf(F("             EepromSelDigit=%d\n"), offset);
   Serial.printf(F("             VfoClockOffset=%d\n"), clkoffset);
   Serial.printf(F("             LcdBrightness=%d\n"), brightness);
   Serial.printf(F("             LcdContrast=%d\n"), contrast);
@@ -2075,13 +1793,6 @@ void setup(void)
   // initialize the serial console
   Serial.begin(115200);
 
-#if (DEBUG > 0)
-  Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
-  decode_debug_levels(DEBUG);
-#else
-  Serial.println("DEBUG is not turned on.");
-#endif
-
   // initialize the BlankRow global to a blank string length of a display row
   BlankRow = (char *) malloc(NumCols + 1);
   for (int i = 0; i < NumCols; ++i)
@@ -2158,6 +1869,13 @@ void setup(void)
   Serial.printf(F("\n"));
 #else
   Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
+#endif
+
+#if (DEBUG > 0)
+  Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
+  decode_debug_levels(DEBUG);
+#else
+  Serial.println("DEBUG is not turned on.");
 #endif
 
   // dump EEPROM values
@@ -2565,7 +2283,6 @@ void contrast_action(struct Menu *menu, int item_num)
   int old_contrast = LcdContrast;
   
   // convert contrast value to a display value in [0, 15]
-//  int index = LcdContrast / 8;
   int index = LcdContrast / 10;
 
   if (index > 15)   // ensure in range
@@ -2619,7 +2336,6 @@ void contrast_action(struct Menu *menu, int item_num)
       }
 
       // adjust display contrast so we can see the results
-//      LcdContrast = index * 8;
       LcdContrast = index * 10;
       analogWrite(mc_Contrast, LcdContrast);
       Serial.printf(F("contrast_action: contrast set to %d\n"), LcdContrast);
@@ -3087,8 +2803,7 @@ void do_external_commands(void)
       char answer[2048];
       
       CommandBuffer[CommandIndex] = '\0';
-      Serial.printf(F("%s >>> %s\n"),
-                    CommandBuffer, do_external_cmd(answer, CommandBuffer, CommandIndex-1));
+      Serial.printf(F("%s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
     }
   }
