@@ -623,7 +623,9 @@ const char * xcmd_id(char *answer, char *cmd)
     return "ERROR";
 
   // generate ID string and return
-  strcpy(answer, Version);
+  strcpy(answer, ProgramName);
+  strcat(answer, " ");
+  strcat(answer, Version);
   strcat(answer, MinorVersion);
   return answer;
 }
