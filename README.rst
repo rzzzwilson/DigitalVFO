@@ -27,11 +27,16 @@ for using the DigitalVFO in an instrument cluster.
 19 May Update
 -------------
 
-The 1.2 version board was a bust - the BNC connector I used was junk.
-Redesigned for another connector, that was 1.3.  Decided to add battery
-monitoring, that was 1.4
+The 1.4 board is back from Seeed, built and operating.  This version has
+provision for the micro to sense the battery voltage so it can display
+a battery symbol with full/empty options.
+Software development time!
 
-Board back from Seeed, built and operating.  Software development time!
+Version 1.3
+===========
+
+A redesign to use another BNC connecter as the first was junk.
+Not sent to Seeed as I also decided to add bettery monitoring.
 
 Version 1.2
 ===========
