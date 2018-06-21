@@ -4,20 +4,25 @@ Digital VFO
 Status
 ======
 
-Version 1.0 is tagged and released!
+Version 1.4 is running!  There is provision for a battery plus monitoring
+of the voltage.  I will get this running, but there will be another version
+called "HeadlessVFO" that will be controlled only by a PC via USB.  This
+version won't need a display or rotary encoder, plus it'll always be
+connected to a PC and get USB power, so no battery.  I probably don't need
+a Teensy 3.2 to drive HeadlessVFO, so I'm searching for cheap microcontrollers
+on AliExpress that can accept text commands from the USB connection.
 
-This is the original version that was squeezed into a small metal case.
-There were a few problems with this:
-
-* the setup got hot running at 12v and still too warm on 9v
-* there was no way to program in-case
-* the internal packaging was too error-prone, breaking wires, etc
-* the contrast control was too "one-sided"
-
-So there will be version 1.1 to address these issues.
 
 Version 1.4
 ===========
+
+21 June Update
+--------------
+
+The case is finished.  When/if a permanent battery is installed I'll drill
+a few holes for a switch and a 9v charging port.  The software for commands
+from the PC is basically finished.  I removed a lot of stuff not necessary
+for using the DigitalVFO in an instrument cluster.
 
 19 May Update
 -------------
