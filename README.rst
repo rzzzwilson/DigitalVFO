@@ -36,7 +36,7 @@ Version 1.3
 ===========
 
 A redesign to use another BNC connecter as the first was junk.
-Not sent to Seeed as I also decided to add bettery monitoring.
+Not sent to Seeed as I also decided to add battery monitoring.
 
 Version 1.2
 ===========
