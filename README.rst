@@ -172,14 +172,14 @@ Schematic
 
 The latest code runs on this hardware arrangement:
 
-.. image:: DigitalVFO_1.2_Schematic.png
+.. image:: DigitalVFO_1.4_Schematic.png
 
 PCB
 =========
 
 The 1.2 PCB looks like this:
 
-.. image:: DigitalVFO_1.2_PCB.png
+.. image:: DigitalVFO_1.4_PCB.png
 
 Interface
 =========
