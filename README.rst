@@ -177,7 +177,7 @@ The latest code runs on this hardware arrangement:
 PCB
 =========
 
-The 1.2 PCB looks like this:
+The 1.4 PCB looks like this:
 
 .. image:: DigitalVFO_1.4_PCB.png
 
