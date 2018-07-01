@@ -1718,10 +1718,13 @@ Connection ~ 5000 3550
 Connection ~ 8600 3550
 Wire Wire Line
 	3200 750  3200 800 
-Text Label 7650 2100 0    60   ~ 0
+Text Label 7450 2100 0    60   ~ 0
 BMON
 Text Label 7050 4900 0    60   ~ 0
 RF
-Text Label 7450 4600 0    60   ~ 0
+Text Label 7450 4400 0    60   ~ 0
 BATT
+Connection ~ 7450 2100
+Connection ~ 7450 4400
+Connection ~ 7050 4900
 $EndSCHEMATC
