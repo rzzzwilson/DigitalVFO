@@ -16,6 +16,14 @@ on AliExpress that can accept text commands from the USB connection.
 Version 1.4
 ===========
 
+03 July Update
+--------------
+
+Still waiting for a 7.4v battery from China.  When it arrives I'll experiment
+with the monitoring software.  I may remove the 'polarity' diode once I have
+cables made up.  It removes about a volt from the battery and the DDS-60 was
+cutting out long before the battery was empty.
+
 21 June Update
 --------------
 
