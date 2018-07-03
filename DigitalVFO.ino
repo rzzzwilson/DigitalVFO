@@ -36,7 +36,7 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.4";
-const char *MinorVersion = ".1";
+const char *MinorVersion = ".2";
 const char *Callsign = "vk4fawr";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -1908,7 +1908,7 @@ void show_main_screen(void)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Freq:");
+//  lcd.print("Vfo:");
   display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
   lcd.print("Hz");
 
