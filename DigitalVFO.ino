@@ -2261,7 +2261,9 @@ void brightness_action(struct Menu *menu, int item_num)
       // adjust display brightness so we can see the results
       LcdBrightness = index * 16 - 1;
       analogWrite(mc_Brightness, LcdBrightness);
+#if (DEBUG & DEBUG_ACT)
       Serial.printf(F("brightness_action: brightness set to %d\n"), LcdBrightness);
+#endif
 
       // show brightness value in row 1
       draw_row1_bar(index);
@@ -2276,7 +2278,7 @@ void brightness_action(struct Menu *menu, int item_num)
 // We show immediately what the changes mean, but only update the
 // actual contrast if we do a vfo_Click action.
 //
-// We limit the allowed range for LcdContrast to [0, 128].
+// We limit the allowed range for LcdContrast to [0, 255].
 //----------------------------------------
 
 void contrast_action(struct Menu *menu, int item_num)
@@ -2285,7 +2287,7 @@ void contrast_action(struct Menu *menu, int item_num)
   int old_contrast = LcdContrast;
   
   // convert contrast value to a display value in [0, 15]
-  int index = LcdContrast / 10;
+  int index = LcdContrast / 16;
 
   if (index > 15)   // ensure in range
     index = 15;
@@ -2338,9 +2340,11 @@ void contrast_action(struct Menu *menu, int item_num)
       }
 
       // adjust display contrast so we can see the results
-      LcdContrast = index * 10;
+      LcdContrast = index * 16;
       analogWrite(mc_Contrast, LcdContrast);
+#if (DEBUG & DEBUG_ACT)
       Serial.printf(F("contrast_action: contrast set to %d\n"), LcdContrast);
+#endif
 
       // show brightness value in row 1
       // Contrast voltage works opposite to brightness
@@ -2383,10 +2387,6 @@ void draw_row1_time(UINT msec, UINT def_time)
 
 void holdclick_action(struct Menu *menu, int item_num)
 {
-#if (DEBUG & DEBUG_ACT)
-  Serial.printf(F("holdclick_action: entered\n"));
-#endif
-
   UINT holdtime = ReHoldClickTime;      // the value we change
   const UINT hold_step = 100;           // step adjustment +/-
   
@@ -2455,10 +2455,6 @@ void holdclick_action(struct Menu *menu, int item_num)
 
 void doubleclick_action(struct Menu *menu, int item_num)
 {
-#if (DEBUG & DEBUG_ACT)
-  Serial.printf(F("doubleclick_action: entered, ReDClickTime=%dmsec\n"), ReDClickTime);
-#endif
-
   int dctime = ReDClickTime;      // the value we adjust
   UINT dclick_step = 100;         // step adjustment +/-
   
@@ -2530,10 +2526,6 @@ void doubleclick_action(struct Menu *menu, int item_num)
 
 void calibrate_action(struct Menu *menu, int item_num)
 {
-#if (DEBUG & DEBUG_ACT)
-  Serial.printf(F("calibrate_action: entered, VfoClockOffset=%dmsec\n"), VfoClockOffset);
-#endif
-
   int save_offset = VfoClockOffset; // save the existing offset
   int seldig = 0;                   // the selected digit in the display
   bool was_standby = false;         // true if we have to set standby when finished
@@ -2775,14 +2767,10 @@ void measure_battery(void)
     {
       Serial.printf(F("actual volts=%f, percent=%d, batt_bucket=%d\n"),
                       MeasuredVoltage, percent, batt_bucket);
+    batt_report_count = -ReportVoltageDelay;
     }
 #endif
   }
-
-#if (DEBUG & DEBUG_BATT)
-  if (batt_report_count > 0)
-    batt_report_count = -ReportVoltageDelay;
-#endif
 }
 
 //----------------------------------------
