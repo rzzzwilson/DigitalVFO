@@ -30,8 +30,8 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-//#define DEBUG         (DEBUG_EVENT)
-#define DEBUG         0
+#define DEBUG         (DEBUG_BATT)
+//#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
@@ -204,8 +204,8 @@ const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
 // battery voltage limits
-const float MaxVoltage = 8.3;   // battery voltage for "100% full"
-const float MinVoltage = 6.1;   // battery voltage for "0% full"
+const float MaxVoltage = 8.0;   // battery voltage for "100% full"
+const float MinVoltage = 6.4;   // battery voltage for "0% full"
 
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
@@ -2726,8 +2726,9 @@ void measure_battery(void)
   last_volts_time = now_milli;
       
   // measure voltage, we will get a value of 1023 for 3.3 volts
+  // adjust the divider (32.0/9.92) to calibrate
   UINT measured = analogRead(mc_BattVolts);
-  MeasuredVoltage = (3.3 * measured) / 1023 * 32.0/10.0;
+  MeasuredVoltage = (3.3 * measured) / 1023 * 32.0/9.92;
 
 #if (DEBUG & DEBUG_BATT)
   if (++batt_report_count > 0)
