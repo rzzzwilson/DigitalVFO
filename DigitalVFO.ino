@@ -17,6 +17,14 @@
 
 
 //-----------------
+// #defines controlling configuration
+// set to "1" to turn on feature
+//-----------------
+
+// show voltage on screen next to battery symbol
+#define SHOW_VOLTAGE  0
+
+//-----------------
 // debug bit masks
 //-----------------
 #define DEBUG_DDS     (1 << 0)  // DDS debug
@@ -30,8 +38,8 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-#define DEBUG         (DEBUG_BATT)
-//#define DEBUG         0
+//#define DEBUG         (DEBUG_BATT)
+#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
@@ -204,8 +212,10 @@ const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
 // battery voltage limits
-const float MaxVoltage = 8.0;   // battery voltage for "100% full"
-const float MinVoltage = 6.4;   // battery voltage for "0% full"
+const float OverVoltage = 8.35;   // battery voltage for CHARGING FULL
+const float MaxVoltage = 7.8;     // battery voltage for "100% full"
+const float MinVoltage = 6.4;     // battery voltage for "0% full"
+const float NoBattVoltage = 4.6;  // if at or below this, no battery
 
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
@@ -1160,6 +1170,13 @@ void event_dump_queue(const char *msg)
 
 void display_battery(void)
 {
+#if SHOW_VOLTAGE
+  // display measured voltage
+  sprintf(FreqBuffer, "%.2fv", MeasuredVoltage);
+  lcd.setCursor(9, 1);
+  lcd.print(FreqBuffer);
+#endif
+
   // create special battery character
   lcd.createChar(BatteryChar, BatterySymbol);
 
@@ -2700,8 +2717,10 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 // If DEBUG reporting is turned on, we report every "ReportVoltageDelay" measurements.
 //----------------------------------------
 
-int batt_report_count = 0;
-  
+#if (DEBUG & DEBUG_BATT)
+  int batt_report_count = 0;
+#endif
+
 void measure_battery(void)
 {
   // get the time since the last measurement
@@ -2718,56 +2737,58 @@ void measure_battery(void)
   last_volts_time = now_milli;
       
   // measure voltage, we will get a value of 1023 for 3.3 volts
-  // adjust the divider (32.0/9.92) to calibrate
+  // adjust the divider to calibrate
+  // with my crappy multimeter:  (32.11/9.90)
   UINT measured = analogRead(mc_BattVolts);
-  MeasuredVoltage = (3.3 * measured) / 1023 * 32.0/9.92;
+  MeasuredVoltage = (3.3 * measured) / 1023 * 32.11/9.90;
+
+  int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
 
 #if (DEBUG & DEBUG_BATT)
   if (++batt_report_count > 0)
   {
-    Serial.printf(F("raw volts=%d, "), measured);
+    Serial.printf(F("raw volts=%d, %.2fv, %d%%, "), measured, MeasuredVoltage, percent);
   }
 #endif
 
   // figure out which battery symbol to use
-  if (MeasuredVoltage < MinVoltage)
+  if (MeasuredVoltage < NoBattVoltage)
   {
-    if (MeasuredVoltage < 1.0)
-    {
-      BatterySymbol = battnone;
+    BatterySymbol = battnone;
 #if (DEBUG & DEBUG_BATT)
-      if (batt_report_count > 0)
-        Serial.printf(F("no battery\n"));
+    if (batt_report_count > 0)
+      Serial.printf(F("no battery\n"));
+      batt_report_count = -ReportVoltageDelay;
 #endif      
-    }
-    else
-    {
-      BatterySymbol = battunder;
-#if (DEBUG & DEBUG_BATT)
-      if (batt_report_count > 0)
-        Serial.printf(F("battery under voltage\n"));
-#endif      
-    }
   }
-  else if (MeasuredVoltage > MaxVoltage)
+  else if (MeasuredVoltage < MinVoltage)
+  {
+    BatterySymbol = battunder;
+#if (DEBUG & DEBUG_BATT)
+    if (batt_report_count > 0)
+      Serial.printf(F("battery under voltage\n"));
+      batt_report_count = -ReportVoltageDelay;
+#endif      
+  }
+  else if (MeasuredVoltage > OverVoltage)
   {
     BatterySymbol = battover;
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
-      Serial.printf(F("battery over voltage\n"));
+      Serial.printf(F("OVER VOLTAGE\n"));
+      batt_report_count = -ReportVoltageDelay;
 #endif      
   }
   else
   {
-    int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
-    int batt_bucket = (int) (percent/20);
-    BatterySymbol = batt_syms[batt_bucket + 2];
+    // calculate the battery symbol depending on %full
+    int batt_bucket = min((int) (percent/(100/6)), 5);
+    BatterySymbol = batt_syms[batt_bucket + 1];
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
     {
-      Serial.printf(F("actual volts=%f, percent=%d, batt_bucket=%d\n"),
-                      MeasuredVoltage, percent, batt_bucket);
-    batt_report_count = -ReportVoltageDelay;
+      Serial.printf(F("batt_bucket=%d\n"), batt_bucket+1);
+      batt_report_count = -ReportVoltageDelay;
     }
 #endif
   }
