@@ -38,8 +38,8 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-//#define DEBUG         (DEBUG_BATT)
-#define DEBUG         0
+#define DEBUG         (DEBUG_BATT)
+//#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
@@ -214,8 +214,9 @@ const int MaxOffsetDigits = 5;
 // battery voltage limits
 const float OverVoltage = 8.35;   // battery voltage for CHARGING FULL
 const float MaxVoltage = 7.8;     // battery voltage for "100% full"
-const float MinVoltage = 6.4;     // battery voltage for "0% full"
-const float NoBattVoltage = 4.6;  // if at or below this, no battery
+const float MinVoltage = 6.48;    // battery voltage for "0% full"
+                                  // BMS disconnects at around 6.40v
+const float NoBattVoltage = 5.5;  // if at or below this, no battery
 
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
@@ -592,6 +593,7 @@ const char * xcmd_help(char *answer, char *cmd)
   strcat(answer, (char *) F("MG;          get VFO mode\n"));
   strcat(answer, (char *) F("FSnnnnnnnn;  set frequency to 'nnnnnnnn'\n"));
   strcat(answer, (char *) F("FG;          get frequency\n"));
+  strcat(answer, (char *) F("VG;          get battery voltage\n"));
   strcat(answer, (char *) F("------------------------------------------------\n"));
   return answer;
 }
