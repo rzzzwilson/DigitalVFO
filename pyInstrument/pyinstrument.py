@@ -4,10 +4,21 @@
 A small library to allow a python program control the DigitalVFO.
 """
 
+import os
 import sys
-import usb.core
-import usb.util
+#import usb.core
+#import usb.util
 import serial
+
+
+# chose a comports() implementation, depending on os
+if os.name == 'nt':
+    from serial.tools.list_ports_windows import comports
+elif os.name == 'posix':
+    from serial.tools.list_ports_posix import comports
+else:
+    raise ImportError(f"Sorry: no implementation for your platform ('{os.name}') available")
+
 
 # Teensy USB identifiers
 VendorID = 0x16c0
@@ -18,11 +29,11 @@ ProductID = 0x0483
 ######
 
 def find_teensy():
-    """Returns a list of all Teensy devices."""
+    """Returns a list of ports for all Teensy devices."""
 
     # find USB devices
     devices = usb.core.find(find_all=True)
-    # loop through devices, printing vendor and product ids in decimal and hex
+    # loop through devices, remembering the Teensy device(s)
     result = []
     for dev in devices:
         if dev.idVendor == VendorID and dev.idProduct == ProductID:
@@ -30,10 +41,46 @@ def find_teensy():
     return result
 
 
+def find_teensy():
+    """Returns a list of ports for all Teensy devices."""
+
+    result = []
+    for usb_dev in sorted(comports()):
+        if usb_dev.vid == VendorID and usb_dev.pid == ProductID:
+            result.append(usb_dev)
+    return result
+
+def _readline(ser):
+    eol = b'\n'
+    line = bytearray()
+    while True:
+        c = ser.read(1)
+        if c:
+            if c == eol:
+                break
+            line += c
+    return str(bytes(line), encoding='utf-8')
+
+
 devices = find_teensy()
 
-print(f'{len(list(devices))} teensy devices found')
+print(f"{len(list(devices))} teensy device{'s' if len(devices) != 1 else ''} found")
 for x in devices:
-    print(f'product={x.product}, manufacturer={x.manufacturer}')
-    print(x._get_full_descriptor_str())
-    print("")
+    print(f'    {x.device}')
+
+print('\nReading...')
+if len(devices) == 1:
+    with serial.Serial(port=devices[0].device, baudrate=115200) as ser:
+#        while True:
+#            line = ser.readline()
+#            if line:
+#                print(str(line, encoding='utf-8'), sep='')
+
+#        while True:
+#            ch = ser.read()
+#            print(str(ch, encoding='utf-8'), end='')
+
+        while True:
+            line = _readline(ser)
+            print(line)
+#            ser.write(b'H;\n')
