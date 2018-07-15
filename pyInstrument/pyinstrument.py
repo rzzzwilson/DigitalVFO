@@ -6,8 +6,8 @@ A small library to allow a python program control the DigitalVFO.
 
 import os
 import sys
-#import usb.core
-#import usb.util
+import time
+import datetime
 import serial
 
 
@@ -61,26 +61,29 @@ def _readline(ser):
             line += c
     return str(bytes(line), encoding='utf-8')
 
+def main(out_file):
+    devices = find_teensy()
+    
+    print(f"{len(list(devices))} teensy device{'s' if len(devices) != 1 else ''} found")
+    for x in devices:
+        print(f'    {x.device}')
+    
+    print('\nReading...')
+    if len(devices) == 1:
+        with open(out_file, 'w') as f:
+            with serial.Serial(port=devices[0].device, baudrate=115200) as ser:
+                while True:
+                    ser.write(b'VG;')
+                    line = _readline(ser)
+                    now = datetime.datetime.now()
+                    dt = now.isoformat()
+                    data = f'{dt},{line[:-1]}\n'
+                    f.write(data)
+                    print(data, end='')
+                    time.sleep(30)
 
-devices = find_teensy()
+if len(sys.argv) != 2:
+    print('Usage: pyinstrument <output_file>')
+    sys.exit(1)
 
-print(f"{len(list(devices))} teensy device{'s' if len(devices) != 1 else ''} found")
-for x in devices:
-    print(f'    {x.device}')
-
-print('\nReading...')
-if len(devices) == 1:
-    with serial.Serial(port=devices[0].device, baudrate=115200) as ser:
-#        while True:
-#            line = ser.readline()
-#            if line:
-#                print(str(line, encoding='utf-8'), sep='')
-
-#        while True:
-#            ch = ser.read()
-#            print(str(ch, encoding='utf-8'), end='')
-
-        while True:
-            line = _readline(ser)
-            print(line)
-#            ser.write(b'H;\n')
+main(sys.argv[1])
