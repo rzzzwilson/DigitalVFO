@@ -70,17 +70,17 @@ def main(out_file):
     
     print('\nReading...')
     if len(devices) == 1:
-        with open(out_file, 'w') as f:
-            with serial.Serial(port=devices[0].device, baudrate=115200) as ser:
-                while True:
-                    ser.write(b'VG;')
-                    line = _readline(ser)
-                    now = datetime.datetime.now()
-                    dt = now.isoformat()
-                    data = f'{dt},{line[:-1]}\n'
-                    f.write(data)
-                    print(data, end='')
-                    time.sleep(30)
+        f =  open(out_file, 'w')
+        with serial.Serial(port=devices[0].device, baudrate=115200) as ser:
+            while True:
+                ser.write(b'VG;')
+                line = _readline(ser)
+                now = datetime.datetime.now()
+                dt = now.isoformat()
+                data = f'{dt},{line[:-1]}\n'
+                f.write(data)
+                f.flush()
+                time.sleep(30)
 
 if len(sys.argv) != 2:
     print('Usage: pyinstrument <output_file>')
