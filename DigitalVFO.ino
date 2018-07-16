@@ -38,8 +38,8 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-#define DEBUG         (DEBUG_BATT)
-//#define DEBUG         0
+//#define DEBUG         (DEBUG_BATT)
+#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
@@ -2834,9 +2834,9 @@ void handle_RE_events()
     // get next event and handle it
     VFOEvent event = event_pop();
   
-  #if (DEBUG & DEBUG_EVENT)
+#if (DEBUG & DEBUG_EVENT)
     Serial.printf(F("handle_RE_events: event=%s\n"), event2display(event));
-  #endif
+#endif
   
     switch (event)
     {
@@ -2900,9 +2900,9 @@ void loop(void)
   display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
   display_battery();
 
-  #if (DEBUG & DEBUG_FREQ)
+#if (DEBUG & DEBUG_FREQ)
     Serial.printf(F("Main loop: VfoFrequency=%ld\n"), VfoFrequency);
-  #endif
+#endif
   
   // if online, update DDS-60 and write changes to EEPROM
   if (VfoMode == vfo_Online)
