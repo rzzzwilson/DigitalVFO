@@ -342,23 +342,23 @@ void abort(const char *msg)
 void decode_debug_levels(int debug)
 {
   if (debug & DEBUG_DDS)
-    Serial.println("    DEBUG_DDS\tbit is set");
+    Serial.println(F("    DEBUG_DDS\tbit is set"));
   if (debug & DEBUG_FREQ)
-    Serial.println("    DEBUG_FREQ\tbit is set");
+    Serial.println(F("    DEBUG_FREQ\tbit is set"));
   if (debug & DEBUG_MENU)
-    Serial.println("    DEBUG_MENU\tbit is set");
+    Serial.println(F("    DEBUG_MENU\tbit is set"));
   if (debug & DEBUG_EVENT)
-    Serial.println("    DEBUG_EVENT\tbit is set");
+    Serial.println(F("    DEBUG_EVENT\tbit is set"));
   if (debug & DEBUG_ACT)
-    Serial.println("    DEBUG_ACT\tbit is set");
+    Serial.println(F("    DEBUG_ACT\tbit is set"));
   if (debug & DEBUG_RE)
-    Serial.println("    DEBUG_RE\tbit is set");
+    Serial.println(F("    DEBUG_RE\tbit is set"));
   if (debug & DEBUG_INT)
-    Serial.println("    DEBUG_INT\tbit is set");
+    Serial.println(F("    DEBUG_INT\tbit is set"));
   if (debug & DEBUG_DISP)
-    Serial.println("    DEBUG_DISP\tbit is set");
+    Serial.println(F("    DEBUG_DISP\tbit is set"));
   if (debug & DEBUG_BATT)
-    Serial.println("    DEBUG_BATT\tbit is set");
+    Serial.println(F("    DEBUG_BATT\tbit is set"));
 }
 
 //----------------------------------------
@@ -1896,7 +1896,7 @@ void setup(void)
   Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
   decode_debug_levels(DEBUG);
 #else
-  Serial.println("DEBUG is not turned on.");
+  Serial.println(F("DEBUG is not turned on."));
 #endif
 
   // dump EEPROM values
