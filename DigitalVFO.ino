@@ -2820,8 +2820,6 @@ void do_external_commands(void)
     
     if (ch == COMMAND_END_CHAR)   // if end of command, execute it
     {
-      char answer[2048];
-      
       CommandBuffer[CommandIndex] = '\0';
       Serial.printf(F("%s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
