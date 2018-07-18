@@ -129,26 +129,6 @@ const int SpaceIndex = 10;
 // define the "in use" character
 byte in_use_char[8] = {0x10,0x18,0x1c,0x1e,0x1c,0x18,0x10,0x00};
 
-// map select_offset to bump values
-ULONG offset2bump[] = {1,           // offset = 0
-                       10,          // 1
-                       100,         // 2
-                       1000,        // 3
-                       10000,       // 4
-                       100000,      // 5
-                       1000000,     // 6
-                       10000000,    // 7
-                       100000000};  // 8
-
-// string holding one entire blank row (allocated in setup())
-char *BlankRow = NULL;
-
-// default LCD contrast & brightness
-const ULONG DefaultFrequency = MinFreq;
-const UINT DefaultSelDigit = 2;
-const UINT DefaultLcdContrast = 0;
-const UINT DefaultLcdBrightness = 150;
-
 //-----
 // battery symbols
 //-----
@@ -163,8 +143,28 @@ byte batt100[8]   = {0x0e,0x1b,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte battover[8]  = {0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte battnone[8]  = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
-// array of references to the 8 'battery symbol' characters
+// array of references to the 9 'battery symbol' characters
 byte *batt_syms[] = {battunder, batt00, batt20, batt40, batt60, batt80, batt100, battover, battnone};
+
+// map select_offset to frequency bump values
+ULONG offset2bump[] = {1,           // offset = 0
+                       10,          // 1
+                       100,         // 2
+                       1000,        // 3
+                       10000,       // 4
+                       100000,      // 5
+                       1000000,     // 6
+                       10000000,    // 7
+                       100000000};  // 8
+
+// string holding one entire blank row (allocated in setup())
+char *BlankRow = NULL;
+
+// default frequency plus LCD contrast & brightness
+const ULONG DefaultFrequency = MinFreq;
+const UINT DefaultSelDigit = 2;
+const UINT DefaultLcdContrast = 0;
+const UINT DefaultLcdBrightness = 150;
 
 //-----
 // Events and the event queue.
@@ -187,10 +187,9 @@ enum Event
 const int EventQueueLength = 10;
 
 //-----
-// VFO modes.
+// VFO modes.  Online or standby.
 //-----
 
-// VFO modes - online or standby
 enum Mode 
 {
   vfo_Standby,
@@ -203,8 +202,9 @@ enum Mode
 
 // milliseconds delay between measuring battery voltage
 const long MeasureVoltageDelay = 1000;
-// number of measure periods before report (if wanted in DEBUG)
-const long ReportVoltageDelay = 30;
+
+// number of voltage measure periods before report (if wanted in DEBUG)
+const long ReportVoltageDelay = 60;
 
 // stuff for the calibrate action
 const int MinClockOffset = -32000;
@@ -212,7 +212,7 @@ const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
 // battery voltage limits
-const float OverVoltage = 8.35;   // battery voltage for CHARGING FULL
+const float OverVoltage = 8.35;   // battery voltage for CHARGING & FULL
 const float MaxVoltage = 7.8;     // battery voltage for "100% full"
 const float MinVoltage = 6.48;    // battery voltage for "0% full"
                                   // BMS disconnects at around 6.40v
@@ -1173,8 +1173,14 @@ void event_dump_queue(const char *msg)
 void display_battery(void)
 {
 #if SHOW_VOLTAGE
-  // display measured voltage
-  sprintf(FreqBuffer, "%.2fv", MeasuredVoltage);
+  // display measured voltage if we have a bettery
+  strcpy(FreqBuffer, "     ");
+  
+  if (MeasuredVoltage > NoBattVoltage)
+  {
+    sprintf(FreqBuffer, "%.2fv", MeasuredVoltage);
+  }
+  
   lcd.setCursor(9, 1);
   lcd.print(FreqBuffer);
 #endif
@@ -2742,7 +2748,8 @@ void measure_battery(void)
   // measure voltage, we will get a value of 1023 for 3.3 volts
   // adjust the divider to calibrate
   // with my crappy multimeter:  (32.11/9.90)
-  MeasuredVoltage = (3.3 * analogRead(mc_BattVolts)) / 1023 * 32.11/9.90;
+  UINT measured = analogRead(mc_BattVolts);
+  MeasuredVoltage = (3.3 * measured) / 1023 * 32.11/9.90;
 
   int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
 
@@ -2823,6 +2830,8 @@ void do_external_commands(void)
     
     if (ch == COMMAND_END_CHAR)   // if end of command, execute it
     {
+      char answer[1024];
+      
       CommandBuffer[CommandIndex] = '\0';
       Serial.printf(F("%s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
