@@ -1390,7 +1390,7 @@ bool re_setup(void)
 }
 
 //----------------------------------------
-// Handler for pusbutton interrupts (UP or DOWN).
+// Handler for pushbutton interrupts (UP or DOWN).
 // Note: input signal has been inverted.
 //----------------------------------------
 
