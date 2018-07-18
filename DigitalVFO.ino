@@ -1892,7 +1892,7 @@ void setup(void)
   Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
 #endif
 
-#if (DEBUG > 0)
+#if (DEBUG != 0)
   Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
   decode_debug_levels(DEBUG);
 #else
@@ -2759,8 +2759,10 @@ void measure_battery(void)
     BatterySymbol = battnone;
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
+    {
       Serial.printf(F("no battery\n"));
       batt_report_count = -ReportVoltageDelay;
+    }
 #endif      
   }
   else if (MeasuredVoltage < MinVoltage)
@@ -2768,8 +2770,10 @@ void measure_battery(void)
     BatterySymbol = battunder;
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
+    {
       Serial.printf(F("battery under voltage\n"));
       batt_report_count = -ReportVoltageDelay;
+    }
 #endif      
   }
   else if (MeasuredVoltage > OverVoltage)
@@ -2777,8 +2781,10 @@ void measure_battery(void)
     BatterySymbol = battover;
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
+    {
       Serial.printf(F("OVER VOLTAGE\n"));
       batt_report_count = -ReportVoltageDelay;
+    }
 #endif      
   }
   else
