@@ -22,7 +22,7 @@
 //-----------------
 
 // show voltage on screen next to battery symbol
-#define SHOW_VOLTAGE  0
+#define SHOW_VOLTAGE  1
 
 //-----------------
 // debug bit masks
@@ -2728,6 +2728,7 @@ void measure_battery(void)
   // get the time since the last measurement
   static long last_volts_time = -MeasureVoltageDelay;    // millis() value last time we measured
   long now_milli = millis();
+
   if (now_milli < last_volts_time)
     last_volts_time = -MeasureVoltageDelay;    // handle wraparound of millis()
 
@@ -2741,8 +2742,7 @@ void measure_battery(void)
   // measure voltage, we will get a value of 1023 for 3.3 volts
   // adjust the divider to calibrate
   // with my crappy multimeter:  (32.11/9.90)
-  UINT measured = analogRead(mc_BattVolts);
-  MeasuredVoltage = (3.3 * measured) / 1023 * 32.11/9.90;
+  MeasuredVoltage = (3.3 * analogRead(mc_BattVolts)) / 1023 * 32.11/9.90;
 
   int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
 
@@ -2761,7 +2761,6 @@ void measure_battery(void)
     if (batt_report_count > 0)
     {
       Serial.printf(F("no battery\n"));
-      batt_report_count = -ReportVoltageDelay;
     }
 #endif      
   }
@@ -2772,7 +2771,6 @@ void measure_battery(void)
     if (batt_report_count > 0)
     {
       Serial.printf(F("battery under voltage\n"));
-      batt_report_count = -ReportVoltageDelay;
     }
 #endif      
   }
@@ -2783,7 +2781,6 @@ void measure_battery(void)
     if (batt_report_count > 0)
     {
       Serial.printf(F("OVER VOLTAGE\n"));
-      batt_report_count = -ReportVoltageDelay;
     }
 #endif      
   }
@@ -2796,10 +2793,16 @@ void measure_battery(void)
     if (batt_report_count > 0)
     {
       Serial.printf(F("batt_bucket=%d\n"), batt_bucket+1);
-      batt_report_count = -ReportVoltageDelay;
     }
 #endif
   }
+
+#if (DEBUG & DEBUG_BATT)
+  if (batt_report_count > 0)
+  {
+    batt_report_count = -ReportVoltageDelay;
+  }
+#endif
 }
 
 //----------------------------------------
