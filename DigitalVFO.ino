@@ -408,7 +408,7 @@ void show_credits(bool minor)
 void banner(void)
 {
   show_credits(false);
-  delay(900);    // wait a bit
+  delay(800);    // wait a bit
 
   // do a fade out, clear screen then normal brightness
   for (int i = LcdBrightness; i; --i)
@@ -428,7 +428,7 @@ void banner(void)
 //     value    the Frequency value to convert
 // The function won't overflow the given buffer, it will truncate at the left.
 // For example, given the value 1234 and a buffer of length 7, will fill the
-// buffer with 0001234.  Given 123456789 it will fill with 3456789.
+// buffer with 0001234.  Given 123456789 and length 7 it will fill with 3456789.
 //
 // Each byte in the buffer is a number in [0, 9], NOT ['0', '9'].
 // The resultant buffer does NOT have a terminating '\0'!
@@ -445,77 +445,6 @@ void ulong2buff(char *buf, int bufsize, ULONG value)
     value = value / 10;
     *ptr-- = char(rem);     // FIXME: don't require char()?
   }
-}
-
-//----------------------------------------
-// Function to convert an unsigned long into a string.
-//     buf      address of buffer for byte results
-//     bufsize  the size of the buffer
-//     value    the unsigned long value to convert to a string
-// The buffer 'buf' is assumed long enough and is '\0' terminated.
-// Return address of first char in the string.
-//----------------------------------------
-
-char * ulong2str(char *buf, int bufsize, ULONG value)
-{
-  char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
-
-  if (value == 0L)
-  {
-    *ptr-- = '0';
-  }
-  else
-  {
-    while (value)
-    {
-      int rem = value % 10;
-  
-      value = value / 10;
-      *ptr-- = rem + '0';
-    }
-  }
-
-  return ++ptr;
-}
-
-//----------------------------------------
-// Function to convert an array of byte digit values into an unsigned long.
-//     buf  address of buffer of byte digits, terminated with '\n'
-// Returns the unsigned long value.
-//----------------------------------------
-
-ULONG buff2ulong(char *buf)
-{
-  ULONG result = 0;
-  
-  while (*buf)
-  {
-    result *= 10;
-    result += *buf;
-    ++buf;
-  }
-
-  return result;
-}
-
-//----------------------------------------
-// Function to convert a string into an unsigned long.
-//     str  start of string of digits, terminated with '\0'
-// Returns the unsigned long value.
-//----------------------------------------
-
-ULONG str2ulong(char *str)
-{
-  ULONG result = 0;
-  
-  while (*str)
-  {
-    result *= 10;
-    result += *str - '0';
-    ++str;
-  }
-
-  return result;
 }
 
 //----------------------------------------
@@ -692,8 +621,8 @@ const char * xcmd_freq(char *answer, char *cmd)
       // return VFO frequency
       if (strlen(cmd) == 3)
       {
-        FreqBuffer[FreqBufferLen-1] = '\0';
-        return ulong2str(FreqBuffer, FreqBufferLen-2, VfoFrequency);
+        sprintf(FreqBuffer, "%ld", VfoFrequency);
+        return FreqBuffer;
       }
       break;
     case 'S':
@@ -710,8 +639,7 @@ const char * xcmd_freq(char *answer, char *cmd)
             return "ERROR";
           }
         }
-        *freq_ptr = '\0';    // remove terminating ';'
-        VfoFrequency = str2ulong(cmd+2);
+        VfoFrequency = strtol(cmd + 2, NULL, 10);
         display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars,
                           NumCols - NumFreqChars - 2, 0);
         return "OK";
