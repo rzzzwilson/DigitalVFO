@@ -24,6 +24,11 @@ else:
 VendorID = 0x16c0
 ProductID = 0x0483
 
+# Lolin32 USB identifiers
+#VendorID = 0x1a86
+#ProductID = 0x7523
+
+
 ######
 # Code to find all Teensy devices that can communicate
 ######
@@ -82,8 +87,15 @@ def main(out_file):
                 f.flush()
                 time.sleep(30)
 
-if len(sys.argv) != 2:
-    print('Usage: pyinstrument <output_file>')
-    sys.exit(1)
+if sys.argv[0] == __file__:
+    if len(sys.argv) != 2:
+        print('Usage: pyinstrument <output_file>')
+        sys.exit(1)
+    filename = sys.argv[1]
+else:
+    if len(sys.argv) != 3:
+        print('Usage: pyinstrument <output_file>')
+        sys.exit(2)
+    filename = sys.argv[1]
 
-main(sys.argv[1])
+main(filename)
