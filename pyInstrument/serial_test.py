@@ -47,11 +47,11 @@ ProductID = 0x6001
 ######
 
 def find_device():
-    """Returns a list of ports for all Teensy devices."""
+    """Returns a list of ports for all required devices."""
 
     # find USB devices
     devices = usb.core.find(find_all=True)
-    # loop through devices, remembering the Teensy device(s)
+    # loop through devices, remembering the required device(s)
     result = []
     for dev in devices:
         if dev.idVendor == VendorID and dev.idProduct == ProductID:
@@ -60,7 +60,7 @@ def find_device():
 
 
 def find_device():
-    """Returns a list of ports for all Teensy devices."""
+    """Returns a list of ports for all required devices."""
 
     result = []
     for usb_dev in sorted(comports()):
@@ -88,23 +88,27 @@ def main(out_file):
     
     print('\nTesting...')
     if len(devices) == 1:
-#        f =  open(out_file, 'w')
         cmd_num = 0
-        with serial.Serial(port=devices[0].device, baudrate=115200) as ser:
+        port = devices[0].device
+        ser = serial.Serial(port=port, baudrate=115200, timeout=1)
+        try:
             line = _readline(ser)   # gobble up any random output
             while True:
                 cmd = f'CMD{cmd_num};'
-                print(f"Send: {cmd}")
+                print(f'Send: {cmd}')
                 ser.write(bytes(cmd, encoding='utf-8'))
                 cmd_num += 1
                 line = _readline(ser)
+                line = line.strip()
                 now = datetime.datetime.now()
                 dt = now.isoformat()
-                data = f'{dt},{line[:-1]}\n'
-                print(f"{dt}: received {line}")
-#                f.write(data)
-#                f.flush()
-                time.sleep(2)
+#                print("%s: received '%s'" % (dt, line))
+                print(f"{dt}: received '{line}'")
+                time.sleep(1)
+        except KeyboardInterrupt:
+            ser.close()
+            print(f'\nSerial port {port} closed.')
+    print('Done')
 
 if sys.argv[0] == __file__:
     if len(sys.argv) != 2:
