@@ -37,30 +37,13 @@ else:
 # bNumConfigurations     :    0x1
 
 
-
 # USB/FTDI board identifiers
 VendorID = 0x0403
 ProductID = 0x6001
 
-######
-# Code to find all USB/FTDI devices that can communicate
-######
 
 def find_device():
-    """Returns a list of ports for all required devices."""
-
-    # find USB devices
-    devices = usb.core.find(find_all=True)
-    # loop through devices, remembering the required device(s)
-    result = []
-    for dev in devices:
-        if dev.idVendor == VendorID and dev.idProduct == ProductID:
-            result.append(dev)
-    return result
-
-
-def find_device():
-    """Returns a list of ports for all required devices."""
+    """Returns a list of ports for all appropriate devices."""
 
     result = []
     for usb_dev in sorted(comports()):
@@ -69,56 +52,62 @@ def find_device():
     return result
 
 def _readline(ser):
-    eol = b'\n'
-    line = bytearray()
+    """Read a line from device on 'ser'.
+
+    ser  open serial port
+
+    Returns all characters up to, but not including, a newline character.
+    """
+
+    line = bytearray()      # collect data in a byte array
+
     while True:
         c = ser.read(1)
         if c:
-            if c == eol:
+            if c == b'\n':
                 break
             line += c
-    return str(bytes(line), encoding='utf-8')
 
-def main(out_file):
+    return str(line, encoding='utf-8')
+
+def main():
+    # get all appropriate device(s)
     devices = find_device()
-    
+   
+    # display the appropriate device(s) - DEBUG
     print(f"{len(list(devices))} device{'s' if len(devices) != 1 else ''} found")
     for x in devices:
         print(f'    {x.device}')
-    
-    print('\nTesting...')
+   
+    # if only 1 device, use it
     if len(devices) == 1:
-        cmd_num = 0
         port = devices[0].device
+        print(f'\nTesting on device {port}\n')
         ser = serial.Serial(port=port, baudrate=115200, timeout=1)
+
+        cmd_num = 0
         try:
-            line = _readline(ser)   # gobble up any random output
             while True:
+                # send a command to Arduino
                 cmd = f'CMD{cmd_num};'
                 print(f'Send: {cmd}')
                 ser.write(bytes(cmd, encoding='utf-8'))
                 cmd_num += 1
+
+                # red the response from the Arduino
                 line = _readline(ser)
                 line = line.strip()
                 now = datetime.datetime.now()
                 dt = now.isoformat()
-#                print("%s: received '%s'" % (dt, line))
                 print(f"{dt}: received '{line}'")
                 time.sleep(1)
         except KeyboardInterrupt:
             ser.close()
             print(f'\nSerial port {port} closed.')
+    else:
+        print("Sorry, too many found devices, quitting.")
+
     print('Done')
 
-if sys.argv[0] == __file__:
-    if len(sys.argv) != 2:
-        print('Usage: pyinstrument <output_file>')
-        sys.exit(1)
-    filename = sys.argv[1]
-else:
-    if len(sys.argv) != 3:
-        print('Usage: pyinstrument <output_file>')
-        sys.exit(2)
-    filename = sys.argv[1]
 
-main(filename)
+main()
