@@ -83,7 +83,7 @@ def main():
     if len(devices) == 1:
         port = devices[0].device
         print(f'\nTesting on device {port}\n')
-        ser = serial.Serial(port=port, baudrate=115200, timeout=1)
+        ser = serial.Serial(port=port, baudrate=115200, timeout=0.5)
 
         cmd_num = 0
         try:
@@ -102,8 +102,12 @@ def main():
                 print(f"{dt}: received '{line}'")
                 time.sleep(1)
         except KeyboardInterrupt:
+            cmd = 'QUIT;'
+            print(f"\nSend: '{cmd}'")
+            ser.write(bytes(cmd, encoding='utf-8'))
+            time.sleep(0.5)
             ser.close()
-            print(f'\nSerial port {port} closed.')
+            print(f'Serial port {port} closed.')
     else:
         print("Sorry, too many found devices, quitting.")
 
