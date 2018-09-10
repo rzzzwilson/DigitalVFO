@@ -2,6 +2,8 @@
 
 """
 A small library to allow a python program to control a pyInstrument.
+
+Use this while running ../SerialTestt/SerialTest.ino .
 """
 
 import os
