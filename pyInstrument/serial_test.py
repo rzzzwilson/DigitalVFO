@@ -104,10 +104,10 @@ def main():
                 print(f"{dt}: received '{line}'")
                 time.sleep(1)
         except KeyboardInterrupt:
-            cmd = 'QUIT;'
-            print(f"\nSend: '{cmd}'")
-            ser.write(bytes(cmd, encoding='utf-8'))
-            time.sleep(0.5)
+#            cmd = 'QUIT;'
+#            print(f"\nSend: '{cmd}'")
+#            ser.write(bytes(cmd, encoding='utf-8'))
+#            time.sleep(0.5)
             ser.close()
             print(f'Serial port {port} closed.')
     else:
