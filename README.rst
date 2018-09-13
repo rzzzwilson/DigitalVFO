@@ -12,9 +12,24 @@ connected to a PC and get USB power, so no battery.  I probably don't need
 a Teensy 3.2 to drive HeadlessVFO, so I'm searching for cheap microcontrollers
 on AliExpress that can accept text commands from the USB connection.
 
+13 Sept: Looking at the AtMega32U4.  A similar chip is used in the Arduino UNO
+R3 instead of the FTDI FT232RL USB interface chip, but the AtMega is quite
+capable and can control the HeadlessVFO so I won't need any special USB
+interface chip.  Anyway, that's the current plan.
+
 
 Version 1.4
 ===========
+
+13 September Update
+-------------------
+
+The battery arrived but it won't fit into the case.  Instead I'm using the two
+18650 test cells with a small BMS PCB, all wrapped in a piece of heat-shrinkable
+tubing.  I've bypassed the polarity protection diode as it eats a volt from the
+battery.  Working well, but I've found that the power switch I used is a little
+unreliable.  That needs to be replaced - the replacement is on a slow boat from
+China.
 
 03 July Update
 --------------

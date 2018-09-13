@@ -96,7 +96,7 @@ def main():
                 ser.write(bytes(cmd, encoding='utf-8'))
                 cmd_num += 1
 
-                # red the response from the Arduino
+                # read the response from the Arduino
                 line = _readline(ser)
                 line = line.strip()
                 now = datetime.datetime.now()
