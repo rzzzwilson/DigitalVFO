@@ -110,8 +110,10 @@ def main():
 #            time.sleep(0.5)
             ser.close()
             print(f'Serial port {port} closed.')
-    else:
+    elif len(devices) > 1:
         print("Sorry, too many found devices, quitting.")
+    elif len(devices) == 0:
+        print("Sorry, didn't find any devices, quitting.")
 
     print('Done')
 
