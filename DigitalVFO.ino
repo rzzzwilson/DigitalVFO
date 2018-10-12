@@ -44,8 +44,8 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.4";
-const char *MinorVersion = ".3";
-const char *Callsign = "vk4fawr";
+const char *MinorVersion = ".4";
+const char *Callsign = "AC3DN";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
 const int NumRows = 2;
@@ -200,6 +200,12 @@ enum Mode
 // Miscellaneous.
 //-----
 
+// number of measurements in the moving average of voltage
+#define AVG_SIZE      5
+
+// the average measured voltage
+float AverageVoltage = 0.0;
+
 // milliseconds delay between measuring battery voltage
 const long MeasureVoltageDelay = 1000;
 
@@ -257,10 +263,6 @@ int VfoClockOffset = 0;
 // global pointing to symbol for current battery state
 byte *BatterySymbol = battunder;
 
-// the latest measured voltage
-float MeasuredVoltage = -1.0;
-
-
 //##############################################################################
 // Utility routines
 //##############################################################################
@@ -284,6 +286,17 @@ void reboot(void)
   Serial.printf(F("Rebooting ...\n"));
   delay(500);
   _reboot_Teensyduino_();
+}
+
+//----------------------------------------
+// Calculate the moving average.
+//     new_measurement  the new measurement to average
+// Returns the current moving average.
+//----------------------------------------
+
+float moving_average(float new_measurement)
+{
+  return ((AVG_SIZE - 1) * AverageVoltage + new_measurement) / AVG_SIZE;
 }
 
 //----------------------------------------
@@ -682,7 +695,7 @@ const char * xcmd_voltage(char *answer, char *cmd)
   switch (cmd[1])
   {
     case 'G':
-      float2str(answer, MeasuredVoltage);
+      float2str(answer, AverageVoltage);
       answer[4] = '\0';
       strcat(answer, (char *) F("v"));
       return answer;
@@ -1104,9 +1117,9 @@ void display_battery(void)
   // display measured voltage if we have a bettery
   strcpy(FreqBuffer, "     ");
   
-  if (MeasuredVoltage > NoBattVoltage)
+  if (AverageVoltage > NoBattVoltage)
   {
-    sprintf(FreqBuffer, "%.2fv", MeasuredVoltage);
+    sprintf(FreqBuffer, "%.2fv", AverageVoltage);
   }
   
   lcd.setCursor(9, 1);
@@ -1847,6 +1860,9 @@ void setup(void)
   // eat any events that may have been generated
   event_flush();
 
+  // measure voltage once, put into AverageVoltage
+  AverageVoltage = get_volts();
+  
   // show the main screen and continue in loop()
   show_main_screen();
   Serial.printf(F("done.\nReady!\n"));
@@ -1869,6 +1885,7 @@ void show_main_screen(void)
   lcd.write(BlankRow);
   lcd.setCursor(0, 1);
   lcd.write(mode2display(VfoMode));
+
 }
 
 //----------------------------------------
@@ -2657,6 +2674,13 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
   int batt_report_count = 0;
 #endif
 
+float get_volts(void)
+{
+  // measure the raw volts and adjust
+  UINT measured = analogRead(mc_BattVolts);
+  return (3.3 * measured) / 1023 * 32.11/9.90;
+}
+
 void measure_battery(void)
 {
   // get the time since the last measurement
@@ -2676,20 +2700,20 @@ void measure_battery(void)
   // measure voltage, we will get a value of 1023 for 3.3 volts
   // adjust the divider to calibrate
   // with my crappy multimeter:  (32.11/9.90)
-  UINT measured = analogRead(mc_BattVolts);
-  MeasuredVoltage = (3.3 * measured) / 1023 * 32.11/9.90;
+  float volts = get_volts();
+  AverageVoltage = moving_average(volts);
 
-  int percent = (int) ((MeasuredVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
+  int percent = (int) ((AverageVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
 
 #if (DEBUG & DEBUG_BATT)
   if (++batt_report_count > 0)
   {
-    Serial.printf(F("raw volts=%d, %.2fv, %d%%, "), measured, MeasuredVoltage, percent);
+    Serial.printf(F("raw volts=%d, %.2fv, %d%%, "), measured, AverageVoltage, percent);
   }
 #endif
 
   // figure out which battery symbol to use
-  if (MeasuredVoltage < NoBattVoltage)
+  if (AverageVoltage < NoBattVoltage)
   {
     BatterySymbol = battnone;
 #if (DEBUG & DEBUG_BATT)
@@ -2699,7 +2723,7 @@ void measure_battery(void)
     }
 #endif      
   }
-  else if (MeasuredVoltage < MinVoltage)
+  else if (AverageVoltage < MinVoltage)
   {
     BatterySymbol = battunder;
 #if (DEBUG & DEBUG_BATT)
@@ -2709,7 +2733,7 @@ void measure_battery(void)
     }
 #endif      
   }
-  else if (MeasuredVoltage > OverVoltage)
+  else if (AverageVoltage > OverVoltage)
   {
     BatterySymbol = battover;
 #if (DEBUG & DEBUG_BATT)

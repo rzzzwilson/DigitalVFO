@@ -82,8 +82,8 @@ def main(out_file):
                 line = _readline(ser)
                 now = datetime.datetime.now()
                 dt = now.isoformat()
-                data = f'{dt},{line[:-1]}\n'
-                f.write(data)
+                data = f'{dt},{line[:-1]}'
+                f.write(data + '\n')
                 f.flush()
                 time.sleep(30)
 
