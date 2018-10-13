@@ -1,6 +1,51 @@
 Digital VFO
 ===========
  
+About
+=====
+
+I'm an amateur radio operator, but since I'm not in the country in which I
+earned my licence I can't actually build or operate a transmitter, so I build
+receivers and test gear.  I'm working on being able to operate from my
+country of residence, but that's another story.
+
+One piece of test gear that would be useful is called a Signal Generator.  This
+is a piece of kit that generates a radio signal of a known frequency.  It can
+also be used as a VFO (variable frequency oscillator) in a receiver.
+
+The modern way to accurately generate an RF signal is to use the AD9851 DDS chip
+which digitally generates a known frequency from a crystal source.  There are 
+quite a few people offering small boards using this chip but I like the
+`DDS-60 daughterboard <http://midnightdesignsolutions.com/dds60/>`_
+from `Midnight Design Solutions <http://midnightdesignsolutions.com/>`_.
+All I need to do is use a microcontroller to control the DDS-60 with some
+sort of frequency display!
+
+The obvious solution is to use an Arduino and the ubiquitous 16x2 display.
+Since the Arduino is a little large and I hoped to put the kit into a small
+case I decided to use a
+`Teensy microcontroller <https://www.pjrc.com/store/teensy32.html>`_
+which is programmable through the Arduino IDE.  It's about 35mm x 18mm!
+
+I got a couple of generic 16x2 displays from
+`AliExpress <https://www.aliexpress.com/wholesale?catId=0&initiative_id=SB_20170504210259&SearchText=display+1602>`_.
+I got the rotary encoder from
+`the same place <https://www.aliexpress.com/wholesale?catId=0&initiative_id=AS_20170504210300&SearchText=rotary+encoder+switch>`_.
+
+Schematic
+=========
+
+The latest code runs on this hardware arrangement:
+
+.. image:: DigitalVFO_1.4_Schematic.png
+
+PCB
+=========
+
+The 1.4 PCB looks like this:
+
+.. image:: DigitalVFO_1.4_PCB.png
+
 Status
 ======
 
@@ -158,51 +203,6 @@ Ongoing:
 * split out the Arduino code samples showing RE handling and menu system
 * think about hardware assembly methods to make DigitalVFO version 2!
 
-
-About
-=====
-
-I'm an amateur radio operator, but since I'm not in the country in which I
-earned my licence I can't actually build or operate a transmitter, so I build
-receivers and test gear.  I'm working on being able to operate from my
-country of residence, but that's another story.
-
-One piece of test gear that would be useful is called a Signal Generator.  This
-is a piece of kit that generates a radio signal of a known frequency.  It can
-also be used as a VFO (variable frequency oscillator) in a receiver.
-
-The modern way to accurately generate an RF signal is to use the AD9851 DDS chip
-which digitally generates a known frequency from a crystal source.  There are 
-quite a few people offering small boards using this chip but I like the
-`DDS-60 daughterboard <http://midnightdesignsolutions.com/dds60/>`_
-from `Midnight Design Solutions <http://midnightdesignsolutions.com/>`_.
-All I need to do is use a microcontroller to control the DDS-60 with some
-sort of frequency display!
-
-The obvious solution is to use an Arduino and the ubiquitous 16x2 display.
-Since the Arduino is a little large and I hoped to put the kit into a small
-case I decided to use a
-`Teensy microcontroller <https://www.pjrc.com/store/teensy32.html>`_
-which is programmable through the Arduino IDE.  It's about 35mm x 18mm!
-
-I got a couple of generic 16x2 displays from
-`AliExpress <https://www.aliexpress.com/wholesale?catId=0&initiative_id=SB_20170504210259&SearchText=display+1602>`_.
-I got the rotary encoder from
-`the same place <https://www.aliexpress.com/wholesale?catId=0&initiative_id=AS_20170504210300&SearchText=rotary+encoder+switch>`_.
-
-Schematic
-=========
-
-The latest code runs on this hardware arrangement:
-
-.. image:: DigitalVFO_1.4_Schematic.png
-
-PCB
-=========
-
-The 1.4 PCB looks like this:
-
-.. image:: DigitalVFO_1.4_PCB.png
 
 Interface
 =========
