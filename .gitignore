@@ -1,6 +1,8 @@
 *.swp
-
 gerber/*
+rescue-backup
+sym-lib-table
+
 # KiCAD files
 *.bak
 *-bak
