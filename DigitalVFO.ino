@@ -1144,6 +1144,9 @@ void display_battery(void)
 // If the value is too long it will be truncated at the left.
 //----------------------------------------
 
+// list of row 0 column positions for the display digits
+//int freq_digit_offset[] = {4, 5, 7, 8, 9, 11, 12, 11};
+
 void display_sel_value(ULONG value, int sel_col, int num_digits, int col, int row)
 {
   char buf [num_digits];
@@ -1831,7 +1834,7 @@ void setup(void)
 #if (DEBUG != 0)
   Serial.printf(F("\n"));
   Serial.printf(F("*************************************************\n"));
-  Serial.printf(F("*           %s %s%s (%s)          *\n"),
+  Serial.printf(F("*            %s %s%s (%s)           *\n"),
                 ProgramName, Version, MinorVersion, Callsign);
   Serial.printf(F("*************************************************\n"));
   Serial.printf(F("\n"));
