@@ -38,13 +38,13 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-//#define DEBUG         (DEBUG_BATT)
-#define DEBUG         0
+#define DEBUG         (DEBUG_BATT)
+//#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.4";
-const char *MinorVersion = ".4";
+const char *MinorVersion = ".5";
 const char *Callsign = "AC3DN";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -219,7 +219,7 @@ const int MaxOffsetDigits = 5;
 
 // battery voltage limits
 const float OverVoltage = 8.35;   // battery voltage for CHARGING & FULL
-const float MaxVoltage = 7.8;     // battery voltage for "100% full"
+const float MaxVoltage = 8.0;     // battery voltage for "100% full"
 const float MinVoltage = 6.48;    // battery voltage for "0% full"
                                   // BMS disconnects at around 6.40v
 const float NoBattVoltage = 5.5;  // if at or below this, no battery
@@ -2708,7 +2708,7 @@ void measure_battery(void)
 #if (DEBUG & DEBUG_BATT)
   if (++batt_report_count > 0)
   {
-    Serial.printf(F("raw volts=%d, %.2fv, %d%%, "), measured, AverageVoltage, percent);
+    Serial.printf(F("volts: average=%.2fv, value=%d%%, "), AverageVoltage, percent);
   }
 #endif
 
