@@ -38,13 +38,13 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-#define DEBUG         (DEBUG_BATT)
+#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
 //#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
-const char *Version = "1.4";
-const char *MinorVersion = ".5";
+const char *Version = "1.5";
+const char *MinorVersion = ".1";
 const char *Callsign = "AC3DN";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -57,6 +57,19 @@ const int NumCols = 16;
 
 typedef unsigned long ULONG;
 typedef unsigned int UINT;
+
+enum Mode 
+{
+  vfo_Standby,
+  vfo_Online
+};
+
+enum Mode VfoMode;          // VFO mode
+
+typedef ULONG Frequency;
+Frequency VfoFrequency;     // VFO frequency (Hz)
+
+typedef int SelOffset;
 
 //-----
 // Pins used by microcontroller to control devices.
@@ -160,11 +173,13 @@ ULONG offset2bump[] = {1,           // offset = 0
 // string holding one entire blank row (allocated in setup())
 char *BlankRow = NULL;
 
-// default frequency plus LCD contrast & brightness
+// default frequency plus LCD contrast & brightness, etc
 const ULONG DefaultFrequency = MinFreq;
+const int DefaultVfoClockOffset = 0;
 const UINT DefaultSelDigit = 2;
 const UINT DefaultLcdContrast = 0;
 const UINT DefaultLcdBrightness = 150;
+const UINT DefaultVoltsCalibrate = 1000;
 
 //-----
 // Events and the event queue.
@@ -186,15 +201,10 @@ enum Event
 // define the length of the event queue
 const int EventQueueLength = 10;
 
+
 //-----
 // VFO modes.  Online or standby.
 //-----
-
-enum Mode 
-{
-  vfo_Standby,
-  vfo_Online
-};
 
 //-----
 // Miscellaneous.
@@ -210,7 +220,14 @@ float AverageVoltage = 0.0;
 const long MeasureVoltageDelay = 1000;
 
 // number of voltage measure periods before report (if wanted in DEBUG)
-const long ReportVoltageDelay = 60;
+const long ReportVoltageDelay = 60;   // once every minute
+
+// value from the circuit: (R12 + R13)/R13
+// this can be calibrated in the menus, see below
+#define VDIV_RATIO    32.11/9.90
+
+// the voltage calibration is the ratio of VoltsCalibrate to VCALIBBASE
+#define VCALIBBASE    1000
 
 // stuff for the calibrate action
 const int MinClockOffset = -32000;
@@ -223,6 +240,10 @@ const float MaxVoltage = 8.0;     // battery voltage for "100% full"
 const float MinVoltage = 6.48;    // battery voltage for "0% full"
                                   // BMS disconnects at around 6.40v
 const float NoBattVoltage = 5.5;  // if at or below this, no battery
+
+// voltage calibration limits
+const UINT MinVoltsCalibrate = 100;
+const UINT MaxVoltsCalibrate = 2000;
 
 // macro to get number of elements in an array
 #define ALEN(a)    (sizeof(a)/sizeof((a)[0]))
@@ -244,13 +265,10 @@ char FreqBuffer[FreqBufferLen];
 // Code for the device will contain internal variables that aren't saved.
 //##############################################################################
 
-enum Mode VfoMode;          // VFO mode
-
-typedef ULONG Frequency;
-Frequency VfoFrequency;     // VFO frequency (Hz)
-
-typedef int SelOffset;
 SelOffset VfoSelectDigit;   // selected column index, zero at the right
+
+// the voltage measurement calibration
+UINT VoltsCalibrate = DefaultVoltsCalibrate;
 
 typedef byte VFOEvent;
 
@@ -258,7 +276,7 @@ int LcdContrast = DefaultLcdContrast;
 int LcdBrightness = DefaultLcdBrightness;
 
 // adjustment value for DDS-60 (set in 'Calibrate' menu)
-int VfoClockOffset = 0;
+int VfoClockOffset = DefaultVfoClockOffset;
 
 // global pointing to symbol for current battery state
 byte *BatterySymbol = battunder;
@@ -1499,8 +1517,8 @@ const int EepromSelDigit = NEXT_FREE;
 #define NEXT_FREE   (EepromSelDigit + sizeof(SelOffset))
 
 // address for 'VfoClockOffset' calibration
-const int EepromVfoOffset = NEXT_FREE;
-#define NEXT_FREE   (EepromVfoOffset + sizeof(VfoClockOffset))
+const int EepromVfoClockOffset = NEXT_FREE;
+#define NEXT_FREE   (EepromVfoClockOffset + sizeof(VfoClockOffset))
 
 // address for byte 'contrast'
 const int EepromContrast = NEXT_FREE;
@@ -1517,6 +1535,10 @@ const int EepromHoldClickTime = NEXT_FREE;
 // address for int 'double click time'
 const int EepromDClickTime = NEXT_FREE;
 #define NEXT_FREE   (EepromDClickTime + sizeof(ReDClickTime))
+
+// address for float 'voltage calibrate'
+const int EepromVoltsCalibrate = NEXT_FREE;
+#define NEXT_FREE   (EepromVoltsCalibrate + sizeof(VoltsCalibrate))
 
 // number of frequency save slots in EEPROM
 const int NumSaveSlots = 10;
@@ -1539,11 +1561,18 @@ void save_to_eeprom(void)
 {
   EEPROM.put(EepromFreq, VfoFrequency);
   EEPROM.put(EepromSelDigit, VfoSelectDigit);
-  EEPROM.put(EepromVfoOffset, VfoClockOffset);
+  EEPROM.put(EepromVfoClockOffset, VfoClockOffset);
   EEPROM.put(EepromBrightness, LcdBrightness);
   EEPROM.put(EepromContrast, LcdContrast);
   EEPROM.put(EepromHoldClickTime, ReHoldClickTime);
   EEPROM.put(EepromDClickTime, ReDClickTime);
+  EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
+
+  Serial.printf(F("save_to_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
+  Serial.printf(F("save_to_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
+  Serial.printf(F("save_to_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
+  Serial.printf(F("save_to_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
+  Serial.printf(F("save_to_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
 }
 
 //----------------------------------------
@@ -1555,11 +1584,18 @@ void restore_from_eeprom(void)
 {
   EEPROM.get(EepromFreq, VfoFrequency);
   EEPROM.get(EepromSelDigit, VfoSelectDigit);
-  EEPROM.get(EepromVfoOffset, VfoClockOffset);
+  EEPROM.get(EepromVfoClockOffset, VfoClockOffset);
   EEPROM.get(EepromBrightness, LcdBrightness);
   EEPROM.get(EepromContrast, LcdContrast);
   EEPROM.get(EepromHoldClickTime, ReHoldClickTime);
   EEPROM.get(EepromDClickTime, ReDClickTime);
+  EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
+  
+  Serial.printf(F("restore_from_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
+  Serial.printf(F("restore_from_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
+  Serial.printf(F("restore_from_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
+  Serial.printf(F("restore_from_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
+  Serial.printf(F("restore_from_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
 }
 
 //----------------------------------------
@@ -1606,14 +1642,16 @@ void dump_eeprom(void)
   int contrast;
   UINT hold;
   UINT dclick;
+  UINT volt_calib;
 
   EEPROM.get(EepromFreq, freq);
   EEPROM.get(EepromSelDigit, offset);
-  EEPROM.get(EepromVfoOffset, clkoffset);
+  EEPROM.get(EepromVfoClockOffset, clkoffset);
   EEPROM.get(EepromBrightness, brightness);
   EEPROM.get(EepromContrast, contrast);
   EEPROM.get(EepromHoldClickTime, hold);
   EEPROM.get(EepromDClickTime, dclick);
+  EEPROM.get(EepromVoltsCalibrate, volt_calib);
   
   Serial.printf(F("=================================================\n"));
   Serial.printf(F("dump_eeprom: VfoFrequency=%ld\n"), freq);
@@ -1623,6 +1661,7 @@ void dump_eeprom(void)
   Serial.printf(F("             LcdContrast=%d\n"), contrast);
   Serial.printf(F("             ReHoldClickTime=%dmsec\n"), hold);
   Serial.printf(F("             ReDClickTime=%dmsec\n"), dclick);
+  Serial.printf(F("             VoltsCalibrate=%d\n"), volt_calib);
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
@@ -1754,6 +1793,51 @@ void dds_setup(void)
 // Main VFO code
 //##############################################################################
 
+#ifdef JUNK
+const int EepromFreq = NEXT_FREE;
+#define NEXT_FREE   (EepromFreq + sizeof(Frequency))
+
+// address for int 'selected digit'
+const int EepromSelDigit = NEXT_FREE;
+#define NEXT_FREE   (EepromSelDigit + sizeof(SelOffset))
+
+// address for 'VfoClockOffset' calibration
+const int EepromVfoClockOffset = NEXT_FREE;
+#define NEXT_FREE   (EepromVfoClockOffset + sizeof(VfoClockOffset))
+
+// address for byte 'contrast'
+const int EepromContrast = NEXT_FREE;
+#define NEXT_FREE   (EepromContrast + sizeof(LcdContrast))
+
+// address for byte 'brightness'
+const int EepromBrightness = NEXT_FREE;
+#define NEXT_FREE   (EepromBrightness + sizeof(LcdBrightness))
+
+// address for int 'hold click time'
+const int EepromHoldClickTime = NEXT_FREE;
+#define NEXT_FREE   (EepromHoldClickTime + sizeof(ReHoldClickTime))
+
+// address for int 'double click time'
+const int EepromDClickTime = NEXT_FREE;
+#define NEXT_FREE   (EepromDClickTime + sizeof(ReDClickTime))
+
+// address for float 'voltage calibrate'
+const int EepromVoltsCalibrate = NEXT_FREE;
+#define NEXT_FREE   (EepromVoltsCalibrate + sizeof(VoltsCalibrate))
+
+// number of frequency save slots in EEPROM
+const int NumSaveSlots = 10;
+
+const int EepromSaveFreqBase = NEXT_FREE;
+#define NEXT_FREE   (EepromSaveFreqBase + NumSaveSlots * sizeof(Frequency))
+
+//also save the offset for each frequency
+const int EepromSaveOffsetBase = NEXT_FREE;
+#define NEXT_FREE   (EepromSaveOffsetBase + NumSaveSlots * sizeof(SelOffset);
+
+// additional EEPROM saved items go here
+#endif
+
 //----------------------------------------
 // The standard Arduino setup() function.
 // Called once on powerup.
@@ -1776,6 +1860,9 @@ void setup(void)
   // set brightness/contrast pin state
   pinMode(mc_Brightness, OUTPUT);
   pinMode(mc_Contrast, OUTPUT);
+
+  // force a full EEPROM write, debug
+//  initialize_eeprom();
 
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
@@ -2497,7 +2584,7 @@ void doubleclick_action(struct Menu *menu, int item_num)
 // a 'click' action only.
 //----------------------------------------
 
-void calibrate_action(struct Menu *menu, int item_num)
+void freq_calibrate_action(struct Menu *menu, int item_num)
 {
   int save_offset = VfoClockOffset; // save the existing offset
   int seldig = 0;                   // the selected digit in the display
@@ -2535,7 +2622,7 @@ void calibrate_action(struct Menu *menu, int item_num)
           if (VfoClockOffset < MinClockOffset)
             VfoClockOffset = MinClockOffset;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_action: vfo_RLeft, after VfoClockOffset=%d\n"),
+          Serial.printf(F("calibrate_freq_action: vfo_RLeft, after VfoClockOffset=%d\n"),
                         VfoClockOffset);
 #endif
           break;
@@ -2544,31 +2631,31 @@ void calibrate_action(struct Menu *menu, int item_num)
           if (VfoClockOffset > MaxClockOffset)
             VfoClockOffset = MaxClockOffset;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_action: vfo_RRight, after VfoClockOffset=%d\n"),
+          Serial.printf(F("calibrate_freq_action: vfo_RRight, after VfoClockOffset=%d\n"),
                         VfoClockOffset);
 #endif
           break;
         case vfo_DnRLeft:
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_action: vfo_DnRLeft\n"));
+          Serial.printf(F("calibrate_freq_action: vfo_DnRLeft\n"));
 #endif
           ++seldig;
           if (seldig >= MaxOffsetDigits)
             seldig = MaxOffsetDigits - 1;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_action: vfo_DnRLeft, after seldig=%d\n"),
+          Serial.printf(F("calibrate_freq_action: vfo_DnRLeft, after seldig=%d\n"),
                         seldig);
 #endif
           break;
         case vfo_DnRRight:
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_action: vfo_DnRLeft\n"));
+          Serial.printf(F("calibrate_freq_action: vfo_DnRLeft\n"));
 #endif
           --seldig;
           if (seldig < 0)
             seldig = 0;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_action: vfo_DnRRight, after seldig=%d\n"),
+          Serial.printf(F("calibrate_freq_action: vfo_DnRRight, after seldig=%d\n"),
                         seldig);
 #endif
           break;
@@ -2594,6 +2681,105 @@ void calibrate_action(struct Menu *menu, int item_num)
 
       // update the VFO frequency
       dds_update(VfoFrequency);
+    }
+  }
+}
+
+//----------------------------------------
+// Adjust the voltage divider calibrate value to adjust displayed voltage.
+//   menu      address of 'calling' menu
+//   item_num  index of MenuItem we were actioned from
+// Show the measured voltage as we adjust the calibration value.
+//
+// In line with all other action menuitems we want to observer the effects
+// of changing the value, but also only want to make a permanent change on
+// a 'click' action only.
+//----------------------------------------
+
+void volts_calibrate_action(struct Menu *menu, int item_num)
+{
+  int save_calibrate = VoltsCalibrate;  // save the existing value
+  int seldig = 0;                       // the selected digit in the display
+
+  // get rid of any stray events to this point
+  event_flush();
+
+  // draw row 0 of menu, get heading from MenuItem
+  lcd.clear();
+  lcd.print(menu->items[item_num]->title);
+
+  // show offset info on row 1
+  display_sel_offset(VoltsCalibrate, seldig, 5, 10, 1);
+
+  // handle events in our own little event loop
+  while (true)
+  {
+    // handle any pending event
+    if (event_pending() > 0)
+    {
+      byte event = event_pop(); // get next event and handle it
+
+      switch (event)
+      {
+        case vfo_RLeft:
+          VoltsCalibrate -= offset2bump[seldig];
+          if (VoltsCalibrate < MinVoltsCalibrate)
+            VoltsCalibrate = MinVoltsCalibrate;
+#if (DEBUG & DEBUG_ACT)
+          Serial.printf(F("volts_calibrate_action: vfo_RLeft, after VoltsCalibrate=%d\n"),
+                        VoltsCalibrate);
+#endif
+          break;
+        case vfo_RRight:
+          VoltsCalibrate += offset2bump[seldig];
+          if (VoltsCalibrate > MaxVoltsCalibrate)
+            VoltsCalibrate = MaxVoltsCalibrate;
+#if (DEBUG & DEBUG_ACT)
+          Serial.printf(F("volts_calibrate_action: vfo_RRight, after VoltsCalibrate=%d\n"),
+                        VoltsCalibrate);
+#endif
+          break;
+        case vfo_DnRLeft:
+#if (DEBUG & DEBUG_ACT)
+          Serial.printf(F("volts_calibrate_action: vfo_DnRLeft\n"));
+#endif
+          ++seldig;
+          if (seldig >= MaxOffsetDigits)
+            seldig = MaxOffsetDigits - 1;
+#if (DEBUG & DEBUG_ACT)
+          Serial.printf(F("volts_calibrate_action: vfo_DnRLeft, after seldig=%d\n"),
+                        seldig);
+#endif
+          break;
+        case vfo_DnRRight:
+#if (DEBUG & DEBUG_ACT)
+          Serial.printf(F("volts_calibrate_action: vfo_DnRLeft\n"));
+#endif
+          --seldig;
+          if (seldig < 0)
+            seldig = 0;
+#if (DEBUG & DEBUG_ACT)
+          Serial.printf(F("volts_calibrate_action: vfo_DnRRight, after seldig=%d\n"),
+                        seldig);
+#endif
+          break;
+        case vfo_Click:
+          save_calibrate = VoltsCalibrate; // for when we exit menuitem
+          display_flash();
+          break;
+        case vfo_HoldClick:
+          // put changed VoltsCalibrate into EEPROM
+          VoltsCalibrate = save_calibrate;
+          save_to_eeprom();             // save changes to EEPROM
+          event_flush();
+          return;
+        default:
+          // ignored events we don't handle
+          break;
+      }
+
+      // show hold time value in row 1
+      display_sel_offset(VoltsCalibrate, seldig, 5, 10, 1);
     }
   }
 }
@@ -2639,15 +2825,16 @@ struct Menu reset_menu = {"Reset all", ALEN(mia_reset), mia_reset};
 
 struct MenuItem mi_brightness = {"Brightness", NULL, &brightness_action};
 struct MenuItem mi_contrast = {"Contrast", NULL, &contrast_action};
-struct MenuItem mi_holdclick = {"Hold click", NULL, &holdclick_action};
-struct MenuItem mi_doubleclick = {"Double click", NULL, &doubleclick_action};
-struct MenuItem mi_calibrate = {"Calibrate", NULL, &calibrate_action};
+struct MenuItem mi_holdclick = {"Hold Click", NULL, &holdclick_action};
+struct MenuItem mi_doubleclick = {"Double Click", NULL, &doubleclick_action};
+struct MenuItem mi_fcalibrate = {"Volts Calibrate", NULL, &freq_calibrate_action};
+struct MenuItem mi_vcalibrate = {"Freq Calibrate", NULL, &volts_calibrate_action};
 struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast, &mi_holdclick,
-                                   &mi_doubleclick, &mi_calibrate};
+                                   &mi_doubleclick, &mi_fcalibrate, &mi_vcalibrate};
 struct Menu settings_menu = {"Settings", ALEN(mia_settings), mia_settings};
 
 //----------------------------------------
-// Main menu
+// Slots menu
 //----------------------------------------
 
 struct MenuItem mi_saveslot = {"Save slot", NULL, &saveslot_action};
@@ -2680,8 +2867,13 @@ struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 float get_volts(void)
 {
   // measure the raw volts and adjust
+  // the UINT read is in range [0..1023] over 3.3 volts
+  // the VDIV_RATIO is the voltage divide ratio, R12 and R13
+  // VoltsCalibrate is the calibration value, a float
   UINT measured = analogRead(mc_BattVolts);
-  return (3.3 * measured) / 1023 * 32.11/9.90;
+  float voltage = 3.3 * measured / 1023;
+  
+  return voltage * (VDIV_RATIO * VoltsCalibrate/VCALIBBASE);
 }
 
 void measure_battery(void)
@@ -2849,6 +3041,30 @@ void handle_RE_events()
         // unrecognized event, ignore
         break;
     }
+  }
+}
+
+//----------------------------------------
+// Overwrite everything in the EEPROM.
+//----------------------------------------
+
+void initialize_eeprom()
+{
+  EEPROM.put(EepromFreq, DefaultFrequency);
+  EEPROM.put(EepromSelDigit, DefaultSelDigit);
+  EEPROM.put(EepromVfoClockOffset, VfoClockOffset);
+  EEPROM.put(EepromContrast, DefaultLcdContrast);
+  EEPROM.put(EepromBrightness, DefaultLcdBrightness);
+  EEPROM.put(EepromHoldClickTime, DefaultHoldClickTime);
+  EEPROM.put(EepromDClickTime, DefaultDClickTime);
+  EEPROM.put(EepromVoltsCalibrate, DefaultVoltsCalibrate);
+
+  for (int i = 0; i < NumSaveSlots; ++i)
+  {
+    int addr = EepromSaveFreqBase + i * sizeof(Frequency);
+    EEPROM.put(addr, (Frequency) 0);
+    addr = EepromSaveOffsetBase + i * sizeof(SelOffset);
+    EEPROM.put(addr, (SelOffset) 0);
   }
 }
 
