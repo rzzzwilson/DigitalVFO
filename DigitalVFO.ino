@@ -1595,13 +1595,11 @@ void save_to_eeprom(void)
   EEPROM.put(EepromDClickTime, ReDClickTime);
   EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
 
-#if 0
   Serial.printf(F("save_to_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
   Serial.printf(F("save_to_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
   Serial.printf(F("save_to_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
   Serial.printf(F("save_to_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
   Serial.printf(F("save_to_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
-#endif
 }
 
 //----------------------------------------
@@ -1620,13 +1618,11 @@ void restore_from_eeprom(void)
   EEPROM.get(EepromDClickTime, ReDClickTime);
   EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
 
-#if 0
   Serial.printf(F("restore_from_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
   Serial.printf(F("restore_from_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
   Serial.printf(F("restore_from_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
   Serial.printf(F("restore_from_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
   Serial.printf(F("restore_from_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
-#endif
 }
 
 //----------------------------------------
@@ -1841,51 +1837,6 @@ void dds_setup(void)
 // Main VFO code
 //##############################################################################
 
-#ifdef JUNK
-const int EepromFreq = NEXT_FREE;
-#define NEXT_FREE   (EepromFreq + sizeof(Frequency))
-
-// address for int 'selected digit'
-const int EepromSelDigit = NEXT_FREE;
-#define NEXT_FREE   (EepromSelDigit + sizeof(SelOffset))
-
-// address for 'VfoClockOffset' calibration
-const int EepromVfoClockOffset = NEXT_FREE;
-#define NEXT_FREE   (EepromVfoClockOffset + sizeof(VfoClockOffset))
-
-// address for byte 'contrast'
-const int EepromContrast = NEXT_FREE;
-#define NEXT_FREE   (EepromContrast + sizeof(LcdContrast))
-
-// address for byte 'brightness'
-const int EepromBrightness = NEXT_FREE;
-#define NEXT_FREE   (EepromBrightness + sizeof(LcdBrightness))
-
-// address for int 'hold click time'
-const int EepromHoldClickTime = NEXT_FREE;
-#define NEXT_FREE   (EepromHoldClickTime + sizeof(ReHoldClickTime))
-
-// address for int 'double click time'
-const int EepromDClickTime = NEXT_FREE;
-#define NEXT_FREE   (EepromDClickTime + sizeof(ReDClickTime))
-
-// address for float 'voltage calibrate'
-const int EepromVoltsCalibrate = NEXT_FREE;
-#define NEXT_FREE   (EepromVoltsCalibrate + sizeof(VoltsCalibrate))
-
-// number of frequency save slots in EEPROM
-const int NumSaveSlots = 10;
-
-const int EepromSaveFreqBase = NEXT_FREE;
-#define NEXT_FREE   (EepromSaveFreqBase + NumSaveSlots * sizeof(Frequency))
-
-//also save the offset for each frequency
-const int EepromSaveOffsetBase = NEXT_FREE;
-#define NEXT_FREE   (EepromSaveOffsetBase + NumSaveSlots * sizeof(SelOffset);
-
-// additional EEPROM saved items go here
-#endif
-
 //----------------------------------------
 // The standard Arduino setup() function.
 // Called once on powerup.
@@ -1908,9 +1859,6 @@ void setup(void)
   // set brightness/contrast pin state
   pinMode(mc_Brightness, OUTPUT);
   pinMode(mc_Contrast, OUTPUT);
-
-  // force a full EEPROM write, debug
-//  initialize_eeprom();
 
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
@@ -2826,7 +2774,7 @@ void volts_calibrate_action(struct Menu *menu, int item_num)
           break;
       }
 
-      // show hold time value in row 1
+      // show voltage calibrate value
       display_sel_offset(VoltsCalibrate, seldig, 5, 10, 1);
     }
   }
@@ -3019,6 +2967,7 @@ void do_external_commands(void)
   {
     char ch = Serial.read();
 
+    // ignore newlines
     if (ch == '\n')
       continue;
     
@@ -3100,6 +3049,8 @@ void handle_RE_events()
 // Overwrite everything in the EEPROM.
 //----------------------------------------
 
+#if 0
+
 void initialize_eeprom()
 {
   EEPROM.put(EepromFreq, DefaultFrequency);
@@ -3120,6 +3071,8 @@ void initialize_eeprom()
   }
 }
 
+#endif
+
 //----------------------------------------
 // Standard Arduino loop() function.
 //----------------------------------------
@@ -3139,13 +3092,9 @@ void loop(void)
   display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
   display_battery();
 
-#if (DEBUG & DEBUG_FREQ)
-    Serial.printf(F("Main loop: VfoFrequency=%ld\n"), VfoFrequency);
-#endif
-  
   // if online, update DDS-60 and write changes to EEPROM
   if (VfoMode == vfo_Online)
   {
-    save_to_eeprom();
+    save_to_eeprom();   // only writes if value(s) different
   }
 }
