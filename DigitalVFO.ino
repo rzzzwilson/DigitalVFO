@@ -22,7 +22,7 @@
 //-----------------
 
 // show voltage on screen next to battery symbol
-#define SHOW_VOLTAGE  1
+#define SHOW_VOLTAGE  0
 
 //-----------------
 // debug bit masks
@@ -45,7 +45,7 @@
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.5";
 const char *MinorVersion = ".1";
-const char *Callsign = "AC3DN";
+const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
 const int NumRows = 2;
@@ -547,6 +547,7 @@ const char * xcmd_help(char *answer, char *cmd)
   strcat(answer, (char *) F("H;           send help text to console\n"));
   strcat(answer, (char *) F("BH;          boot hard, reload software via USB\n"));
   strcat(answer, (char *) F("BS;          boot soft, restart program\n"));
+  strcat(answer, (char *) F("DE;          dump EEPROM\n"));
   strcat(answer, (char *) F("ID;          get device identifier string\n"));
   strcat(answer, (char *) F("MO;          set VFO mode to 'online'\n"));
   strcat(answer, (char *) F("MS;          set VFO mode to 'standby'\n"));
@@ -578,6 +579,26 @@ const char * xcmd_boot(char *answer, char *cmd)
       // soft reboot
       restart();
       return "Doing soft reboot";
+  }
+  
+  return "ERROR";
+}
+
+//----------------------------------------
+// Debug:
+//     DE;  dump EEPROM values
+//----------------------------------------
+
+const char * xcmd_debug(char *answer, char *cmd)
+{
+  if (strlen(cmd) != 3)
+    return "ERROR";
+
+  switch (cmd[1])
+  {
+    case 'E':
+      dump_eeprom();
+      return "OK";
   }
   
   return "ERROR";
@@ -646,6 +667,8 @@ const char * xcmd_mode(char *answer, char *cmd)
 
 const char * xcmd_freq(char *answer, char *cmd)
 {
+  Frequency tmp_freq;
+  
   switch (cmd[1])
   {
     case 'G':
@@ -670,7 +693,10 @@ const char * xcmd_freq(char *answer, char *cmd)
             return "ERROR";
           }
         }
-        VfoFrequency = strtol(cmd + 2, NULL, 10);
+        tmp_freq = strtol(cmd + 2, NULL, 10);
+        if ((tmp_freq > MaxFreq) || (tmp_freq < MinFreq))
+          return "ERROR";
+        VfoFrequency = tmp_freq;
         display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars,
                           NumCols - NumFreqChars - 2, 0);
         return "OK";
@@ -715,7 +741,6 @@ const char * xcmd_voltage(char *answer, char *cmd)
     case 'G':
       float2str(answer, AverageVoltage);
       answer[4] = '\0';
-      strcat(answer, (char *) F("v"));
       return answer;
   }
 
@@ -747,6 +772,8 @@ const char * do_external_cmd(char *answer, char *cmd, int index)
   {
     case 'B':
       return xcmd_boot(answer, cmd);
+    case 'D':
+      return xcmd_debug(answer, cmd);
     case 'F':
       return xcmd_freq(answer, cmd);
     case 'H':
@@ -1568,11 +1595,13 @@ void save_to_eeprom(void)
   EEPROM.put(EepromDClickTime, ReDClickTime);
   EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
 
+#if 0
   Serial.printf(F("save_to_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
   Serial.printf(F("save_to_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
   Serial.printf(F("save_to_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
   Serial.printf(F("save_to_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
   Serial.printf(F("save_to_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
+#endif
 }
 
 //----------------------------------------
@@ -1590,12 +1619,14 @@ void restore_from_eeprom(void)
   EEPROM.get(EepromHoldClickTime, ReHoldClickTime);
   EEPROM.get(EepromDClickTime, ReDClickTime);
   EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
-  
+
+#if 0
   Serial.printf(F("restore_from_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
   Serial.printf(F("restore_from_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
   Serial.printf(F("restore_from_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
   Serial.printf(F("restore_from_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
   Serial.printf(F("restore_from_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
+#endif
 }
 
 //----------------------------------------
@@ -1633,6 +1664,9 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 //----------------------------------------
 
 #if (DEBUG != 0)
+
+#define DELAY_MS 200
+
 void dump_eeprom(void)
 {
   Frequency freq;
@@ -1647,30 +1681,44 @@ void dump_eeprom(void)
   EEPROM.get(EepromFreq, freq);
   EEPROM.get(EepromSelDigit, offset);
   EEPROM.get(EepromVfoClockOffset, clkoffset);
-  EEPROM.get(EepromBrightness, brightness);
   EEPROM.get(EepromContrast, contrast);
+  EEPROM.get(EepromBrightness, brightness);
   EEPROM.get(EepromHoldClickTime, hold);
   EEPROM.get(EepromDClickTime, dclick);
   EEPROM.get(EepromVoltsCalibrate, volt_calib);
   
   Serial.printf(F("=================================================\n"));
-  Serial.printf(F("dump_eeprom: VfoFrequency=%ld\n"), freq);
-  Serial.printf(F("             EepromSelDigit=%d\n"), offset);
-  Serial.printf(F("             VfoClockOffset=%d\n"), clkoffset);
-  Serial.printf(F("             LcdBrightness=%d\n"), brightness);
-  Serial.printf(F("             LcdContrast=%d\n"), contrast);
-  Serial.printf(F("             ReHoldClickTime=%dmsec\n"), hold);
-  Serial.printf(F("             ReDClickTime=%dmsec\n"), dclick);
-  Serial.printf(F("             VoltsCalibrate=%d\n"), volt_calib);
+  delay(DELAY_MS);
+  Serial.printf(F("dump_eeprom:\n"));
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  VfoFrequency=%ld\n"), EepromFreq, sizeof(Frequency), freq);
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  EepromSelDigit=%d\n"), EepromSelDigit, sizeof(SelOffset), offset);
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  VfoClockOffset=%d\n"), EepromVfoClockOffset, sizeof(VfoClockOffset), clkoffset);
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  LcdContrast=%d\n"), EepromContrast, sizeof(LcdContrast), contrast);
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  LcdBrightness=%d\n"), EepromBrightness, sizeof(LcdBrightness), brightness);
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  ReHoldClickTime=%dmsec\n"), EepromHoldClickTime, sizeof(ReHoldClickTime), hold);
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  ReDClickTime=%dmsec\n"), EepromDClickTime, sizeof(ReDClickTime), dclick);
+  delay(DELAY_MS);
+  Serial.printf(F("   %2d (%d)  VoltsCalibrate=%d\n"), EepromVoltsCalibrate, sizeof(VoltsCalibrate), volt_calib);
+  delay(DELAY_MS);
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
     get_slot(i, freq, offset);
     Serial.printf(F("Slot %d: freq=%ld, seldig=%d\n"), i, freq, offset);
+    delay(DELAY_MS);
   }
 
   Serial.printf(F("=================================================\n"));
+  delay(DELAY_MS);
 }
+
 #endif
 
 //##############################################################################
@@ -1955,7 +2003,7 @@ void setup(void)
   
   // show the main screen and continue in loop()
   show_main_screen();
-  Serial.printf(F("done.\nReady!\n"));
+  Serial.printf(F("\nReady!\n"));
 }
 
 //----------------------------------------
@@ -2201,7 +2249,7 @@ void reset_action(struct Menu *menu, int item_num)
   LcdContrast = DefaultLcdContrast;
   ReHoldClickTime = DefaultHoldClickTime;
   ReDClickTime = DefaultDClickTime;
-  
+
   save_to_eeprom();
 
   // zero the save slots
@@ -2698,8 +2746,8 @@ void freq_calibrate_action(struct Menu *menu, int item_num)
 
 void volts_calibrate_action(struct Menu *menu, int item_num)
 {
-  int save_calibrate = VoltsCalibrate;  // save the existing value
-  int seldig = 0;                       // the selected digit in the display
+  UINT save_calibrate = VoltsCalibrate;  // save the existing value
+  int seldig = 0;                        // the selected digit in the display
 
   // get rid of any stray events to this point
   event_flush();
@@ -2827,8 +2875,8 @@ struct MenuItem mi_brightness = {"Brightness", NULL, &brightness_action};
 struct MenuItem mi_contrast = {"Contrast", NULL, &contrast_action};
 struct MenuItem mi_holdclick = {"Hold Click", NULL, &holdclick_action};
 struct MenuItem mi_doubleclick = {"Double Click", NULL, &doubleclick_action};
-struct MenuItem mi_fcalibrate = {"Volts Calibrate", NULL, &freq_calibrate_action};
-struct MenuItem mi_vcalibrate = {"Freq Calibrate", NULL, &volts_calibrate_action};
+struct MenuItem mi_fcalibrate = {"Volts Calibrate", NULL, &volts_calibrate_action};
+struct MenuItem mi_vcalibrate = {"Freq Calibrate", NULL, &freq_calibrate_action};
 struct MenuItem *mia_settings[] = {&mi_brightness, &mi_contrast, &mi_holdclick,
                                    &mi_doubleclick, &mi_fcalibrate, &mi_vcalibrate};
 struct Menu settings_menu = {"Settings", ALEN(mia_settings), mia_settings};
@@ -2903,7 +2951,8 @@ void measure_battery(void)
 #if (DEBUG & DEBUG_BATT)
   if (++batt_report_count > 0)
   {
-    Serial.printf(F("volts: average=%.2fv, value=%d%%, "), AverageVoltage, percent);
+//    Serial.printf(F("volts: %.2fv, value=%d%%, "), AverageVoltage, percent);
+    Serial.printf(F("volts: %.2fv, "), AverageVoltage);
   }
 #endif
 
@@ -2969,6 +3018,9 @@ void do_external_commands(void)
   while (Serial.available()) 
   {
     char ch = Serial.read();
+
+    if (ch == '\n')
+      continue;
     
     if (CommandIndex < MAX_COMMAND_LEN)
     { 
@@ -3052,7 +3104,7 @@ void initialize_eeprom()
 {
   EEPROM.put(EepromFreq, DefaultFrequency);
   EEPROM.put(EepromSelDigit, DefaultSelDigit);
-  EEPROM.put(EepromVfoClockOffset, VfoClockOffset);
+  EEPROM.put(EepromVfoClockOffset, DefaultVfoClockOffset);
   EEPROM.put(EepromContrast, DefaultLcdContrast);
   EEPROM.put(EepromBrightness, DefaultLcdBrightness);
   EEPROM.put(EepromHoldClickTime, DefaultHoldClickTime);
@@ -3095,6 +3147,5 @@ void loop(void)
   if (VfoMode == vfo_Online)
   {
     save_to_eeprom();
-    dds_update(VfoFrequency);
   }
 }
