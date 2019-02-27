@@ -154,7 +154,8 @@ byte batt60[8]    = {0x0e,0x1b,0x11,0x11,0x1f,0x1f,0x1f,0x1f};
 byte batt80[8]    = {0x0e,0x1b,0x11,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte batt100[8]   = {0x0e,0x1b,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte battover[8]  = {0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
-byte battnone[8]  = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+//byte battnone[8]  = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+byte battnone[8]  = {0x04,0x06,0x0d,0x15,0x14,0x10,0x00,0x00}; // a USB log (sort of)
 
 // array of references to the 9 'battery symbol' characters
 byte *batt_syms[] = {battunder, batt00, batt20, batt40, batt60, batt80, batt100, battover, battnone};
@@ -517,6 +518,139 @@ void vfo_display_mode(void)
   lcd.write(BlankRow);
   lcd.setCursor(0, 1);
   lcd.write(mode2display(VfoMode));
+}
+
+
+//----------------------------------------
+// Toggle the VFO mode: vfo_Online or vfo_Standby.
+//
+// Note that DDS-60 only updates if VfoMode is vfo_Online.
+// So we must be sure to set mode to vfo_Standby after dds_standby()
+// and set mode to vfo_Online before dds_online().
+//----------------------------------------
+void vfo_toggle_mode(void)
+{
+  if (VfoMode == vfo_Online)
+  {
+    // DDS goes into standby, change mode
+    dds_standby();
+    VfoMode = vfo_Standby;
+  }
+  else
+  {
+    // DDS goes online, change mode
+    VfoMode = vfo_Online;
+    dds_online();
+  }
+
+  // update display
+  vfo_display_mode();
+}
+
+//----------------------------------------
+// Measure the battery voltage.
+// We measure every "MeasureVoltageDelay" milliseconds, update the battery symbol.
+// If DEBUG reporting is turned on, we report every "ReportVoltageDelay" measurements.
+//----------------------------------------
+
+#if (DEBUG & DEBUG_BATT)
+  int batt_report_count = 0;
+#endif
+
+float get_volts(void)
+{
+  // measure the raw volts and adjust
+  // the "measured" voltage read is in range [0..1023] over 3.3 volts
+  // the VDIV_RATIO is the voltage divide ratio, R12 and R13
+  // VoltsCalibrate is the calibration value, a float
+  UINT measured = analogRead(mc_BattVolts);
+  float voltage = 3.3 * measured / 1023;   // this is the raw, unadjusted voltage
+  
+  return voltage * (VDIV_RATIO * VoltsCalibrate/VCALIBBASE);
+}
+
+void measure_battery(void)
+{
+  // get the time since the last measurement
+  static long last_volts_time = -MeasureVoltageDelay;    // millis() value last time we measured
+  long now_milli = millis();
+
+  if (now_milli < last_volts_time)
+    last_volts_time = -MeasureVoltageDelay;    // handle wraparound of millis()
+
+  // if not time yet, return
+  if (now_milli < last_volts_time + MeasureVoltageDelay)
+    return;
+
+  // measuring, set measurement time to "now"
+  last_volts_time = now_milli;
+      
+  // measure voltage, we will get a value of 1023 for 3.3 volts
+  // adjust the divider to calibrate
+  // with my crappy multimeter:  (32.11/9.90)
+  float volts = get_volts();
+  AverageVoltage = moving_average(volts);
+
+  int percent = (int) ((AverageVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
+
+#if (DEBUG & DEBUG_BATT)
+  if (++batt_report_count > 0)
+  {
+//    Serial.printf(F("volts: %.2fv, value=%d%%, "), AverageVoltage, percent);
+    Serial.printf(F("volts: %.2fv, "), AverageVoltage);
+  }
+#endif
+
+  // figure out which battery symbol to use
+  if (AverageVoltage < NoBattVoltage)
+  {
+    BatterySymbol = battnone;
+#if (DEBUG & DEBUG_BATT)
+    if (batt_report_count > 0)
+    {
+      Serial.printf(F("no battery\n"));
+    }
+#endif      
+  }
+  else if (AverageVoltage < MinVoltage)
+  {
+    BatterySymbol = battunder;
+#if (DEBUG & DEBUG_BATT)
+    if (batt_report_count > 0)
+    {
+      Serial.printf(F("battery under voltage\n"));
+    }
+#endif      
+  }
+  else if (AverageVoltage > OverVoltage)
+  {
+    BatterySymbol = battover;
+#if (DEBUG & DEBUG_BATT)
+    if (batt_report_count > 0)
+    {
+      Serial.printf(F("OVER VOLTAGE\n"));
+    }
+#endif      
+  }
+  else
+  {
+    // calculate the battery symbol depending on %full
+    int batt_bucket = min((int) (percent/(100/6)), 5);
+    BatterySymbol = batt_syms[batt_bucket + 1];
+#if (DEBUG & DEBUG_BATT)
+    if (batt_report_count > 0)
+    {
+      Serial.printf(F("batt_bucket=%d\n"), batt_bucket+1);
+    }
+#endif
+  }
+
+#if (DEBUG & DEBUG_BATT)
+  if (batt_report_count > 0)
+  {
+    batt_report_count = -ReportVoltageDelay;
+  }
+#endif
 }
 
 
@@ -1563,7 +1697,7 @@ const int EepromHoldClickTime = NEXT_FREE;
 const int EepromDClickTime = NEXT_FREE;
 #define NEXT_FREE   (EepromDClickTime + sizeof(ReDClickTime))
 
-// address for float 'voltage calibrate'
+// address for int 'voltage calibrate'
 const int EepromVoltsCalibrate = NEXT_FREE;
 #define NEXT_FREE   (EepromVoltsCalibrate + sizeof(VoltsCalibrate))
 
@@ -1594,12 +1728,6 @@ void save_to_eeprom(void)
   EEPROM.put(EepromHoldClickTime, ReHoldClickTime);
   EEPROM.put(EepromDClickTime, ReDClickTime);
   EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
-
-  Serial.printf(F("save_to_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
-  Serial.printf(F("save_to_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
-  Serial.printf(F("save_to_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
-  Serial.printf(F("save_to_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
-  Serial.printf(F("save_to_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
 }
 
 //----------------------------------------
@@ -1616,13 +1744,7 @@ void restore_from_eeprom(void)
   EEPROM.get(EepromContrast, LcdContrast);
   EEPROM.get(EepromHoldClickTime, ReHoldClickTime);
   EEPROM.get(EepromDClickTime, ReDClickTime);
-  EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
-
-  Serial.printf(F("restore_from_eeprom: VfoClockOffset=%ld\n"), VfoClockOffset);
-  Serial.printf(F("restore_from_eeprom: VoltsCalibrate=%ld\n"), VoltsCalibrate);
-  Serial.printf(F("restore_from_eeprom: EepromVfoClockOffset=%d\n"), EepromVfoClockOffset);
-  Serial.printf(F("restore_from_eeprom: EepromVoltsCalibrate=%d\n"), EepromVoltsCalibrate);
-  Serial.printf(F("restore_from_eeprom: EepromSaveFreqBase=%d\n"), EepromSaveFreqBase);
+  EEPROM.get(EepromVoltsCalibrate, VoltsCalibrate);
 }
 
 //----------------------------------------
@@ -1661,7 +1783,7 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 
 #if (DEBUG != 0)
 
-#define DELAY_MS 200
+#define DELAY_MS 20
 
 void dump_eeprom(void)
 {
@@ -1845,7 +1967,9 @@ void dds_setup(void)
 void setup(void)
 {
   // initialize the serial console
-  Serial.begin(115200);
+  Serial.begin(19200);
+
+//  initialize_eeprom();  // DEBUG
 
   // initialize the BlankRow global to a blank string length of a display row
   BlankRow = (char *) malloc(NumCols + 1);
@@ -2692,10 +2816,13 @@ void freq_calibrate_action(struct Menu *menu, int item_num)
 // a 'click' action only.
 //----------------------------------------
 
+#define VOLTS_DELAY_MS   500
+
 void volts_calibrate_action(struct Menu *menu, int item_num)
 {
-  UINT save_calibrate = VoltsCalibrate;  // save the existing value
-  int seldig = 0;                        // the selected digit in the display
+  UINT save_calibrate = VoltsCalibrate; // save the existing value
+  int seldig = 0;                       // the selected digit in the display
+  ULONG delay_time = 0;                 // show voltage every whenever
 
   // get rid of any stray events to this point
   event_flush();
@@ -2773,37 +2900,24 @@ void volts_calibrate_action(struct Menu *menu, int item_num)
           // ignored events we don't handle
           break;
       }
-
-      // show voltage calibrate value
+      
+      // show new voltage calibrate value
       display_sel_offset(VoltsCalibrate, seldig, 5, 10, 1);
     }
-  }
-}
+    
+    // show instantaneous voltage, every short period
+    // we must not display voltage every time through loop, too fast!
+    if (millis() > delay_time)
+    {
+      float volts = get_volts();
+      
+      sprintf(FreqBuffer, "%.2fv", volts);
+      lcd.setCursor(0, 1);
+      lcd.print(FreqBuffer);
 
-//----------------------------------------
-// Toggle the VFO mode: vfo_Online or vfo_Standby.
-//
-// Note that DDS-60 only updates if VfoMode is vfo_Online.
-// So we must be sure to set mode to vfo_Standby after dds_standby()
-// and set mode to vfo_Online before dds_online().
-//----------------------------------------
-void vfo_toggle_mode(void)
-{
-  if (VfoMode == vfo_Online)
-  {
-    // DDS goes into standby, change mode
-    dds_standby();
-    VfoMode = vfo_Standby;
+      delay_time = millis() + VOLTS_DELAY_MS;
+    }
   }
-  else
-  {
-    // DDS goes online, change mode
-    VfoMode = vfo_Online;
-    dds_online();
-  }
-
-  // update display
-  vfo_display_mode();
 }
 
 //----------------------------------------
@@ -2851,112 +2965,6 @@ struct MenuItem *mia_main[] = {&mi_slots, &mi_settings, &mi_reset, &mi_credits};
 struct Menu menu_main = {"Menu", ALEN(mia_main), mia_main};
 
 //----------------------------------------
-// Measure the battery voltage.
-// We measure every "MeasureVoltageDelay" milliseconds, update the battery symbol.
-// If DEBUG reporting is turned on, we report every "ReportVoltageDelay" measurements.
-//----------------------------------------
-
-#if (DEBUG & DEBUG_BATT)
-  int batt_report_count = 0;
-#endif
-
-float get_volts(void)
-{
-  // measure the raw volts and adjust
-  // the UINT read is in range [0..1023] over 3.3 volts
-  // the VDIV_RATIO is the voltage divide ratio, R12 and R13
-  // VoltsCalibrate is the calibration value, a float
-  UINT measured = analogRead(mc_BattVolts);
-  float voltage = 3.3 * measured / 1023;
-  
-  return voltage * (VDIV_RATIO * VoltsCalibrate/VCALIBBASE);
-}
-
-void measure_battery(void)
-{
-  // get the time since the last measurement
-  static long last_volts_time = -MeasureVoltageDelay;    // millis() value last time we measured
-  long now_milli = millis();
-
-  if (now_milli < last_volts_time)
-    last_volts_time = -MeasureVoltageDelay;    // handle wraparound of millis()
-
-  // if not time yet, return
-  if (now_milli < last_volts_time + MeasureVoltageDelay)
-    return;
-
-  // measuring, set measurement time to "now"
-  last_volts_time = now_milli;
-      
-  // measure voltage, we will get a value of 1023 for 3.3 volts
-  // adjust the divider to calibrate
-  // with my crappy multimeter:  (32.11/9.90)
-  float volts = get_volts();
-  AverageVoltage = moving_average(volts);
-
-  int percent = (int) ((AverageVoltage - MinVoltage) / (MaxVoltage - MinVoltage) * 100.0);
-
-#if (DEBUG & DEBUG_BATT)
-  if (++batt_report_count > 0)
-  {
-//    Serial.printf(F("volts: %.2fv, value=%d%%, "), AverageVoltage, percent);
-    Serial.printf(F("volts: %.2fv, "), AverageVoltage);
-  }
-#endif
-
-  // figure out which battery symbol to use
-  if (AverageVoltage < NoBattVoltage)
-  {
-    BatterySymbol = battnone;
-#if (DEBUG & DEBUG_BATT)
-    if (batt_report_count > 0)
-    {
-      Serial.printf(F("no battery\n"));
-    }
-#endif      
-  }
-  else if (AverageVoltage < MinVoltage)
-  {
-    BatterySymbol = battunder;
-#if (DEBUG & DEBUG_BATT)
-    if (batt_report_count > 0)
-    {
-      Serial.printf(F("battery under voltage\n"));
-    }
-#endif      
-  }
-  else if (AverageVoltage > OverVoltage)
-  {
-    BatterySymbol = battover;
-#if (DEBUG & DEBUG_BATT)
-    if (batt_report_count > 0)
-    {
-      Serial.printf(F("OVER VOLTAGE\n"));
-    }
-#endif      
-  }
-  else
-  {
-    // calculate the battery symbol depending on %full
-    int batt_bucket = min((int) (percent/(100/6)), 5);
-    BatterySymbol = batt_syms[batt_bucket + 1];
-#if (DEBUG & DEBUG_BATT)
-    if (batt_report_count > 0)
-    {
-      Serial.printf(F("batt_bucket=%d\n"), batt_bucket+1);
-    }
-#endif
-  }
-
-#if (DEBUG & DEBUG_BATT)
-  if (batt_report_count > 0)
-  {
-    batt_report_count = -ReportVoltageDelay;
-  }
-#endif
-}
-
-//----------------------------------------
 // Do any commands from the external controller.
 //----------------------------------------
 
@@ -2991,7 +2999,7 @@ void do_external_commands(void)
 // Handle events from the rotary encoder.
 //----------------------------------------
 
-void handle_RE_events()
+void handle_RE_events(void)
 {
   while (event_pending() > 0)
   {
