@@ -21,7 +21,7 @@
 // set to "1" to turn on feature
 //-----------------
 
-// show voltage on screen next to battery symbol
+// show voltage on screen next to battery symbol, if symbol displayed
 #define SHOW_VOLTAGE  0
 
 //-----------------
@@ -38,8 +38,8 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
-//#define DEBUG         0
+//#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
+#define DEBUG         0
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
@@ -585,9 +585,7 @@ void measure_battery(void)
   // measuring, set measurement time to "now"
   last_volts_time = now_milli;
       
-  // measure voltage, we will get a value of 1023 for 3.3 volts
-  // adjust the divider to calibrate
-  // with my crappy multimeter:  (32.11/9.90)
+  // measure voltage, average it
   float volts = get_volts();
   AverageVoltage = moving_average(volts);
 
@@ -596,7 +594,6 @@ void measure_battery(void)
 #if (DEBUG & DEBUG_BATT)
   if (++batt_report_count > 0)
   {
-//    Serial.printf(F("volts: %.2fv, value=%d%%, "), AverageVoltage, percent);
     Serial.printf(F("volts: %.2fv, "), AverageVoltage);
   }
 #endif
@@ -1324,13 +1321,12 @@ void display_battery(void)
 //----------------------------------------
 
 // list of row 0 column positions for the display digits
-//int freq_digit_offset[] = {4, 5, 7, 8, 9, 11, 12, 11};
+//int freq_digit_offset[] = {4, 5, 7, 8, 9, 11, 12, 13};
 
 void display_sel_value(ULONG value, int sel_col, int num_digits, int col, int row)
 {
   char buf [num_digits];
   int index = num_digits - sel_col - 1;
-  bool lead_zero = true;
 
 #if (DEBUG & DEBUG_DISPLAY)
   Serial.printf(F("display_sel_value: value=%ld, sel_col=%d, num_digits=%d, col=%d, row=%d"),
@@ -1348,6 +1344,7 @@ void display_sel_value(ULONG value, int sel_col, int num_digits, int col, int ro
   lcd.setCursor(col, row);
 
   // write each byte of buffer to display, handling leading spaces and selection
+  bool lead_zero = true;
   for (int i = 0; i < num_digits; ++i)
   {
     int char_val = buf[i];
@@ -1781,9 +1778,7 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 // Print all EEPROM saved data to console.
 //----------------------------------------
 
-#if (DEBUG != 0)
-
-#define DELAY_MS 20
+#define DELAY_MS 20  // not sure why we need a delay to print reliably
 
 void dump_eeprom(void)
 {
@@ -1836,8 +1831,6 @@ void dump_eeprom(void)
   Serial.printf(F("=================================================\n"));
   delay(DELAY_MS);
 }
-
-#endif
 
 //##############################################################################
 // Code to handle the DDS-60
@@ -2052,8 +2045,8 @@ void setup(void)
 #if (DEBUG != 0)
   Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
   decode_debug_levels(DEBUG);
-#else
-  Serial.println(F("DEBUG is not turned on."));
+//#else
+//  Serial.println(F("DEBUG is not turned on."));
 #endif
 
   // dump EEPROM values
@@ -2306,6 +2299,9 @@ void deleteslot_action(struct Menu *menu, int item_num)
 // Reset everything in the VFO - Dangerous!
 //   menu      address of 'calling' menu
 //   item_num  index of MenuItem we were actioned from
+//
+// All calibration settings lost as well as all slots, brightness
+// and contrast settings, etc.
 //----------------------------------------
 
 void reset_action(struct Menu *menu, int item_num)
@@ -2321,6 +2317,7 @@ void reset_action(struct Menu *menu, int item_num)
   LcdContrast = DefaultLcdContrast;
   ReHoldClickTime = DefaultHoldClickTime;
   ReDClickTime = DefaultDClickTime;
+  VoltsCalibrate = DefaultVoltsCalibrate;
 
   save_to_eeprom();
 
@@ -2816,7 +2813,7 @@ void freq_calibrate_action(struct Menu *menu, int item_num)
 // a 'click' action only.
 //----------------------------------------
 
-#define VOLTS_DELAY_MS   500
+#define VOLTS_DELAY_MS   500    // milkisecond delay between updates in menu screen
 
 void volts_calibrate_action(struct Menu *menu, int item_num)
 {
