@@ -15,14 +15,16 @@
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
 
-
 //-----------------
 // #defines controlling configuration
 // set to "1" to turn on feature
 //-----------------
 
+// Defining this to be '1' ERASES EVERYTHING IN EEPROM
+#define INIT_EEPROM   0
+
 // show voltage on screen next to battery symbol, if symbol displayed
-#define SHOW_VOLTAGE  0
+#define SHOW_VOLTAGE  1
 
 //-----------------
 // debug bit masks
@@ -44,7 +46,7 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.5";
-const char *MinorVersion = ".1";
+const char *MinorVersion = ".2";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -103,6 +105,23 @@ const byte DDS_FQ_UD = 16;    // connected to AD9851 device select pin
 const byte DDS_W_CLK = 15;    // connected to AD9851 clock pin
 const byte DDS_DATA = 14;     // connected to AD9851 D7 (serial data) pin 
 
+// Define the address in EEPROM of various things.
+#define NEXT_SLOT(a)    ((a) + sizeof(a))
+
+// number of frequency save slots in EEPROM
+const int NumSaveSlots = 10;
+
+const int EepromFreq = 0;
+const int EepromSelDigit = NEXT_SLOT(EepromFreq);
+const int EepromVfoClockOffset = NEXT_SLOT(EepromSelDigit);
+const int EepromContrast = NEXT_SLOT(EepromVfoClockOffset);
+const int EepromBrightness = NEXT_SLOT(EepromContrast);
+const int EepromHoldClickTime = NEXT_SLOT(EepromBrightness);
+const int EepromDClickTime = NEXT_SLOT(EepromHoldClickTime);
+const int EepromVoltsCalibrate = NEXT_SLOT(EepromDClickTime);
+const int EepromSaveFreqBase = NEXT_SLOT(EepromVoltsCalibrate);
+const int EepromSaveOffsetBase = EepromSaveFreqBase + NumSaveSlots*sizeof(Frequency);
+
 //-----
 // Data and values used by the LCD code.
 //-----
@@ -155,7 +174,7 @@ byte batt80[8]    = {0x0e,0x1b,0x11,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte batt100[8]   = {0x0e,0x1b,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
 byte battover[8]  = {0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f,0x1f};
 //byte battnone[8]  = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-byte battnone[8]  = {0x04,0x06,0x0d,0x15,0x14,0x10,0x00,0x00}; // a USB log (sort of)
+byte battnone[8]  = {0x04,0x06,0x0d,0x15,0x14,0x10,0x00,0x00}; // a USB logo (sort of)
 
 // array of references to the 9 'battery symbol' characters
 byte *batt_syms[] = {battunder, batt00, batt20, batt40, batt60, batt80, batt100, battover, battnone};
@@ -259,6 +278,18 @@ int CommandIndex = 0;
 const int FreqBufferLen = 16;
 char FreqBuffer[FreqBufferLen];
 
+// time when click becomes a "hold click" (milliseconds)
+// the delay is configurable in the UI
+const int MinHoldClickTime = 100;     // min configurable time
+const int MaxHoldClickTime = 1000;    // max configurable time
+const int DefaultHoldClickTime = 500; // default time
+
+// time when click becomes a "double click" (milliseconds)
+// the delay is configurable in the UI
+const int MinDClickTime = 100;        // min configurable time
+const int MaxDClickTime = 1000;       // max configurable time
+const int DefaultDClickTime = 300;    // default time
+
 //##############################################################################
 // The VFO state variables and typedefs
 //
@@ -308,6 +339,34 @@ void reboot(void)
 }
 
 //----------------------------------------
+// Overwrite everything in the EEPROM.
+//----------------------------------------
+
+#if INIT_EEPROM
+
+void initialize_eeprom()
+{
+  EEPROM.put(EepromFreq, DefaultFrequency);
+  EEPROM.put(EepromSelDigit, DefaultSelDigit);
+  EEPROM.put(EepromVfoClockOffset, DefaultVfoClockOffset);
+  EEPROM.put(EepromContrast, DefaultLcdContrast);
+  EEPROM.put(EepromBrightness, DefaultLcdBrightness);
+  EEPROM.put(EepromHoldClickTime, DefaultHoldClickTime);
+  EEPROM.put(EepromDClickTime, DefaultDClickTime);
+  EEPROM.put(EepromVoltsCalibrate, DefaultVoltsCalibrate);
+
+  for (int i = 0; i < NumSaveSlots; ++i)
+  {
+    int addr = EepromSaveFreqBase + i * sizeof(Frequency);
+    EEPROM.put(addr, (Frequency) 0);
+    addr = EepromSaveOffsetBase + i * sizeof(SelOffset);
+    EEPROM.put(addr, (SelOffset) 0);
+  }
+}
+
+#endif
+
+//----------------------------------------
 // Calculate the moving average.
 //     new_measurement  the new measurement to average
 // Returns the current moving average.
@@ -325,7 +384,7 @@ float moving_average(float new_measurement)
 // Only first NumRows*NumCols chars of message is displayed on LCD.
 //----------------------------------------
 
-void abort(const char *msg)
+void DV_abort(const char *msg)
 {
   char buf[NumCols*NumRows+1];
   char *ptr = buf;
@@ -562,7 +621,7 @@ float get_volts(void)
   // measure the raw volts and adjust
   // the "measured" voltage read is in range [0..1023] over 3.3 volts
   // the VDIV_RATIO is the voltage divide ratio, R12 and R13
-  // VoltsCalibrate is the calibration value, a float
+  // VoltsCalibrate is the calibration value, an int
   UINT measured = analogRead(mc_BattVolts);
   float voltage = 3.3 * measured / 1023;   // this is the raw, unadjusted voltage
   
@@ -657,7 +716,7 @@ void measure_battery(void)
 // External commands are:
 //     H;           send help text to console
 //     BH;          boot hard, reload software via USB
-//     BS;          boot soft, restart program
+//     BS;          boot soft, just restart program
 //     ID;          get device identifier string
 //     MO;          set VFO mode to 'online'
 //     MS;          set VFO mode to 'standby'
@@ -791,7 +850,7 @@ const char * xcmd_mode(char *answer, char *cmd)
 }
 
 //----------------------------------------
-// Mode commands:
+// Frequency commands:
 //     FSnnnnnnnn;  set frequency to 'nnnnnnnn'
 //     FG;          get frequency
 //----------------------------------------
@@ -880,6 +939,7 @@ const char * xcmd_voltage(char *answer, char *cmd)
 
 //----------------------------------------
 // Process an external command.
+//     answer  address of place to store answer string
 //     cmd     address of command string buffer
 //     index   index of last char in string buffer
 // 'cmd' is '\0' terminated.
@@ -995,7 +1055,7 @@ void menu_draw(struct Menu *menu)
 // Draw a standard menuitem on the screen.
 //     menu      pointer to a Menu structure
 //     item_num  the item number to show
-// Custome menuitems are drawn by their handler.
+// Custom menuitems are drawn by their handler.
 //----------------------------------------
 
 void menuitem_draw(struct Menu *menu, int item_num)
@@ -1148,7 +1208,7 @@ int queue_aft = 0;    // points at next free slot for a pushed event
 //----------------------------------------
 // Push an event onto the event queue.
 //     event  number of the event to push
-// If queue is full, abort()!
+// If queue is full, abort!
 //
 // This routine is called only from interrupt code, so needs no protection.
 //----------------------------------------
@@ -1171,7 +1231,7 @@ void event_push(VFOEvent event)
   if (queue_aft == queue_fore)
   {
       event_dump_queue("ERROR: event queue full!");
-      abort("Event queue full");
+      DV_abort("Event queue full");
   }
 }
 
@@ -1183,7 +1243,7 @@ void event_push(VFOEvent event)
 
 VFOEvent event_pop(void)
 {
-  // Must protect from RE code fiddling with queue
+  // Must protect from RE code while fiddling with queue
   noInterrupts();
 
   // if queue empty, return None event
@@ -1457,18 +1517,6 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
 // Based on insight from Oleg Mazurov, Nick Gammon, rt, Steve Spence.
 //##############################################################################
 
-// time when click becomes a "hold click" (milliseconds)
-// the delay is configurable in the UI
-const int MinHoldClickTime = 100;     // min configurable time
-const int MaxHoldClickTime = 1000;    // max configurable time
-const int DefaultHoldClickTime = 500; // default time
-
-// time when click becomes a "double click" (milliseconds)
-// the delay is configurable in the UI
-const int MinDClickTime = 100;        // min configurable time
-const int MaxDClickTime = 1000;       // max configurable time
-const int DefaultDClickTime = 300;    // default time
-
 // internal variables
 UINT ReHoldClickTime = DefaultHoldClickTime;
 UINT ReDClickTime = DefaultDClickTime;
@@ -1657,58 +1705,6 @@ void pinB_isr(void)
 //##############################################################################
 // Code to save/restore in EEPROM.
 //##############################################################################
-
-// Define the address in EEPROM of various things.
-// The "NEXT_FREE" value is the address of the next free slot address.
-// Ignore "redefine errors" - not very helpful in this case!
-// The idea is that we are free to rearrange objects below with minimum fuss.
-
-// start storing at address 0
-#define NEXT_FREE   (0)
-
-// address for Frequency 'frequency'
-const int EepromFreq = NEXT_FREE;
-#define NEXT_FREE   (EepromFreq + sizeof(Frequency))
-
-// address for int 'selected digit'
-const int EepromSelDigit = NEXT_FREE;
-#define NEXT_FREE   (EepromSelDigit + sizeof(SelOffset))
-
-// address for 'VfoClockOffset' calibration
-const int EepromVfoClockOffset = NEXT_FREE;
-#define NEXT_FREE   (EepromVfoClockOffset + sizeof(VfoClockOffset))
-
-// address for byte 'contrast'
-const int EepromContrast = NEXT_FREE;
-#define NEXT_FREE   (EepromContrast + sizeof(LcdContrast))
-
-// address for byte 'brightness'
-const int EepromBrightness = NEXT_FREE;
-#define NEXT_FREE   (EepromBrightness + sizeof(LcdBrightness))
-
-// address for int 'hold click time'
-const int EepromHoldClickTime = NEXT_FREE;
-#define NEXT_FREE   (EepromHoldClickTime + sizeof(ReHoldClickTime))
-
-// address for int 'double click time'
-const int EepromDClickTime = NEXT_FREE;
-#define NEXT_FREE   (EepromDClickTime + sizeof(ReDClickTime))
-
-// address for int 'voltage calibrate'
-const int EepromVoltsCalibrate = NEXT_FREE;
-#define NEXT_FREE   (EepromVoltsCalibrate + sizeof(VoltsCalibrate))
-
-// number of frequency save slots in EEPROM
-const int NumSaveSlots = 10;
-
-const int EepromSaveFreqBase = NEXT_FREE;
-#define NEXT_FREE   (EepromSaveFreqBase + NumSaveSlots * sizeof(Frequency))
-
-//also save the offset for each frequency
-const int EepromSaveOffsetBase = NEXT_FREE;
-#define NEXT_FREE   (EepromSaveOffsetBase + NumSaveSlots * sizeof(SelOffset);
-
-// additional EEPROM saved items go here
 
 //----------------------------------------
 // Save VFO state to EEPROM.
@@ -1962,7 +1958,10 @@ void setup(void)
   // initialize the serial console
   Serial.begin(19200);
 
-//  initialize_eeprom();  // DEBUG
+#if INIT_EEPROM
+  Serial.printf(F("Erasing EVERYTHING in EEPROM!\n"));
+  initialize_eeprom();  // WARNING! Destroys the EEPROM stored values
+#endif
 
   // initialize the BlankRow global to a blank string length of a display row
   BlankRow = (char *) malloc(NumCols + 1);
@@ -2813,7 +2812,7 @@ void freq_calibrate_action(struct Menu *menu, int item_num)
 // a 'click' action only.
 //----------------------------------------
 
-#define VOLTS_DELAY_MS   500    // milkisecond delay between updates in menu screen
+#define VOLTS_DELAY_MS   500    // millisecond delay between updates in menu screen
 
 void volts_calibrate_action(struct Menu *menu, int item_num)
 {
@@ -2978,12 +2977,13 @@ void do_external_commands(void)
     
     if (CommandIndex < MAX_COMMAND_LEN)
     { 
+      // only add if command not over-length
       CommandBuffer[CommandIndex++] = ch;
     }
     
     if (ch == COMMAND_END_CHAR)   // if end of command, execute it
     {
-      char answer[1024];
+      char answer[512];    // place to construct answer strings
       
       CommandBuffer[CommandIndex] = '\0';
       Serial.printf(F("%s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
@@ -3049,34 +3049,6 @@ void handle_RE_events(void)
     }
   }
 }
-
-//----------------------------------------
-// Overwrite everything in the EEPROM.
-//----------------------------------------
-
-#if 0
-
-void initialize_eeprom()
-{
-  EEPROM.put(EepromFreq, DefaultFrequency);
-  EEPROM.put(EepromSelDigit, DefaultSelDigit);
-  EEPROM.put(EepromVfoClockOffset, DefaultVfoClockOffset);
-  EEPROM.put(EepromContrast, DefaultLcdContrast);
-  EEPROM.put(EepromBrightness, DefaultLcdBrightness);
-  EEPROM.put(EepromHoldClickTime, DefaultHoldClickTime);
-  EEPROM.put(EepromDClickTime, DefaultDClickTime);
-  EEPROM.put(EepromVoltsCalibrate, DefaultVoltsCalibrate);
-
-  for (int i = 0; i < NumSaveSlots; ++i)
-  {
-    int addr = EepromSaveFreqBase + i * sizeof(Frequency);
-    EEPROM.put(addr, (Frequency) 0);
-    addr = EepromSaveOffsetBase + i * sizeof(SelOffset);
-    EEPROM.put(addr, (SelOffset) 0);
-  }
-}
-
-#endif
 
 //----------------------------------------
 // Standard Arduino loop() function.
