@@ -52,7 +52,7 @@ Status
 .. image:: DigitalVFO_case.jpg
 
 Version 1.4 is running as shown above!  There is provision for a battery plus
-monitoring of the voltage.  I will get this running, but there will be another
+monitoring of the voltage and calibration of various things.  There will be another
 version called "HeadlessVFO" that will be controlled only by a PC via USB.  This
 version won't need a display or rotary encoder, plus it'll always be
 connected to a PC and get USB power, so no battery.  I probably don't need
