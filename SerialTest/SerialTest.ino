@@ -74,7 +74,7 @@ bool do_external_commands(void)
 // delay between heartbeat flashes - milliseconds
 #define HEARTBEAT_DELAY   5000
 
-unsigned int next_heartbeat = millis() + 500;
+long next_heartbeat = 0;
 
 // the loop routine runs over and over again forever:
 void loop()
@@ -86,10 +86,12 @@ void loop()
     digitalWrite(led, HIGH);    // turn the LED off (HIGH is the voltage level)
     delay(50);                  // wait a bit
   }
-
+  
   if (millis() > next_heartbeat)
   {
-    next_heartbeat = millis() + HEARTBEAT_DELAY;
+    next_heartbeat += HEARTBEAT_DELAY;
+    
+    Serial.println("heartbeat");
     
     digitalWrite(led, LOW);     // turn the LED on by making the voltage LOW
     delay(50);                  // wait a bit
