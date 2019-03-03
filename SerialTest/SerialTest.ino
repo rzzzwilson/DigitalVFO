@@ -1,8 +1,8 @@
 /*
-  Blink
-  Turns on an LED on for one second, then off for one second, repeatedly.
- 
-  This example code is in the public domain.
+  Test serial communications.
+
+  Run this sketch on the arduino while also running
+  ../pyInstrument/serial_test.py
  */
  
 // Pin 13 has an LED connected on most Arduino boards.
@@ -16,7 +16,6 @@ int led = 13;
 void setup() {                
   // initialize the serial console
   Serial.begin(115200);
-  Serial.println("Type short commands terminated by ';', eg, \"help;\".");
   
   // initialize the digital pin as an output.
   pinMode(led, OUTPUT);     
@@ -46,7 +45,7 @@ bool do_external_commands(void)
     
     if (CommandIndex < MAX_COMMAND_LEN)
     { 
-      CommandBuffer[CommandIndex++] = tolower(ch);
+      CommandBuffer[CommandIndex++] = ch;
     }
     
     if (ch == COMMAND_END_CHAR)   // if end of command, execute it
@@ -54,16 +53,9 @@ bool do_external_commands(void)
       CommandBuffer[CommandIndex] = '\0';
       CommandIndex = 0;
       
-      if (strcmp(CommandBuffer, "quit;") == 0)
-        return false;
-      if (strcmp(CommandBuffer, "help;") == 0)
-      {
-        Serial.print("Type in command strings shorter than ");
-        Serial.print(MAX_COMMAND_LEN);
-        Serial.println(" characters terminated by a ';' character.");
-      }
       Serial.print("handled ");
       Serial.println(CommandBuffer);
+      
       return true;
     }
   }
@@ -91,7 +83,7 @@ void loop()
   {
     next_heartbeat += HEARTBEAT_DELAY;
     
-    Serial.println("heartbeat");
+//    Serial.println("heartbeat");
     
     digitalWrite(led, LOW);     // turn the LED on by making the voltage LOW
     delay(50);                  // wait a bit
