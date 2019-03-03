@@ -16,7 +16,7 @@ int led = 13;
 void setup() {                
   // initialize the serial console
   Serial.begin(115200);
-  Serial.println("begin!");
+  Serial.println("Type short commands terminated by ';', eg, \"help;\".");
   
   // initialize the digital pin as an output.
   pinMode(led, OUTPUT);     
@@ -39,20 +39,29 @@ bool do_external_commands(void)
   while (Serial.available()) 
   {
     char ch = Serial.read();
+
+    // ignore a newline
+    if (ch == '\n')
+      continue;
     
     if (CommandIndex < MAX_COMMAND_LEN)
     { 
-      CommandBuffer[CommandIndex++] = ch;
+      CommandBuffer[CommandIndex++] = tolower(ch);
     }
     
     if (ch == COMMAND_END_CHAR)   // if end of command, execute it
     {
-      char answer[1024];
-      
       CommandBuffer[CommandIndex] = '\0';
       CommandIndex = 0;
-      if (strcmp(CommandBuffer, "QUIT;") == 0)
+      
+      if (strcmp(CommandBuffer, "quit;") == 0)
         return false;
+      if (strcmp(CommandBuffer, "help;") == 0)
+      {
+        Serial.print("Type in command strings shorter than ");
+        Serial.print(MAX_COMMAND_LEN);
+        Serial.println(" characters terminated by a ';' character.");
+      }
       Serial.print("handled ");
       Serial.println(CommandBuffer);
       return true;
