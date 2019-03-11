@@ -26,6 +26,10 @@ Since the Arduino is a little large and I hoped to put the kit into a small
 case I decided to use a
 `Teensy microcontroller <https://www.pjrc.com/store/teensy32.html>`_
 which is programmable through the Arduino IDE.  It's about 35mm x 18mm!
+It's a very capable little microcontroller and is overkill for this project,
+but it's what I have at the moment.  I'm working on a
+`smaller "generic" design <https://github.com/rzzzwilson/KiCad_Projects/tree/master/Iota>`_
+that I can fit into any PCB projects that need smarts.
 
 I got a couple of generic 16x2 displays from
 `AliExpress <https://www.aliexpress.com/wholesale?catId=0&initiative_id=SB_20170504210259&SearchText=display+1602>`_.
