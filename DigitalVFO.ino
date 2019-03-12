@@ -3072,6 +3072,7 @@ void loop(void)
   // if online, update DDS-60 and write changes to EEPROM
   if (VfoMode == vfo_Online)
   {
+    dds_update(VfoFrequency);
     save_to_eeprom();   // only writes if value(s) different
   }
 }
