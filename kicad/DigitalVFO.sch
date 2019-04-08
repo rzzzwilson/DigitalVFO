@@ -15,7 +15,7 @@ Comment3 ""
 Comment4 "A DDS VFO controlled by a rotary encoder."
 $EndDescr
 $Comp
-L DigitalVFO:74HC14 U1
+L DigitalVFO-rescue:74HC14-DigitalVFO U1
 U 1 1 5AB77F50
 P 4000 1350
 F 0 "U1" H 4150 1450 50  0000 C CNN
@@ -26,7 +26,7 @@ F 3 "" H 4000 1350 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:74HC14 U1
+L DigitalVFO-rescue:74HC14-DigitalVFO U1
 U 2 1 5AB77F8D
 P 3250 2150
 F 0 "U1" H 3400 2250 50  0000 C CNN
@@ -37,7 +37,7 @@ F 3 "" H 3250 2150 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:74HC14 U1
+L DigitalVFO-rescue:74HC14-DigitalVFO U1
 U 3 1 5AB77FD8
 P 2550 2950
 F 0 "U1" H 2700 3050 50  0000 C CNN
@@ -48,7 +48,7 @@ F 3 "" H 2550 2950 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:74HC14 U1
+L DigitalVFO-rescue:74HC14-DigitalVFO U1
 U 4 1 5AB7800C
 P 1800 4850
 F 0 "U1" H 1950 4950 50  0000 C CNN
@@ -59,7 +59,7 @@ F 3 "" H 1800 4850 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:74HC14 U1
+L DigitalVFO-rescue:74HC14-DigitalVFO U1
 U 5 1 5AB78036
 P 1800 5250
 F 0 "U1" H 1950 5350 50  0000 C CNN
@@ -70,7 +70,7 @@ F 3 "" H 1800 5250 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:74HC14 U1
+L DigitalVFO-rescue:74HC14-DigitalVFO U1
 U 6 1 5AB78082
 P 1800 5650
 F 0 "U1" H 1950 5750 50  0000 C CNN
@@ -81,7 +81,7 @@ F 3 "" H 1800 5650 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:Rotary_Encoder_Switch SW1
+L DigitalVFO-rescue:Rotary_Encoder_Switch-DigitalVFO SW1
 U 1 1 5AB790E1
 P 1550 1500
 F 0 "SW1" V 1700 1200 50  0000 C CNN
@@ -92,7 +92,7 @@ F 3 "" H 1550 1760 50  0001 C CNN
 	0    -1   -1   0   
 $EndComp
 $Comp
-L DigitalVFO:Q_NPN_EBC Q1
+L DigitalVFO-rescue:Q_NPN_EBC-DigitalVFO Q1
 U 1 1 5AB79125
 P 7050 3150
 F 0 "Q1" H 7200 3200 50  0000 L CNN
@@ -178,7 +178,7 @@ Wire Wire Line
 Wire Wire Line
 	6300 1850 8050 1850
 $Comp
-L DigitalVFO:R_Small R7
+L DigitalVFO-rescue:R_Small-DigitalVFO R7
 U 1 1 5AB7A839
 P 6550 3150
 F 0 "R7" V 6650 3100 50  0000 L CNN
@@ -193,7 +193,7 @@ Wire Wire Line
 Wire Wire Line
 	6650 3150 6800 3150
 $Comp
-L DigitalVFO:LCD1602A U3
+L DigitalVFO-rescue:LCD1602A-DigitalVFO U3
 U 1 1 5AB7B041
 P 8850 2250
 F 0 "U3" H 8300 3400 60  0000 C CNN
@@ -208,7 +208,7 @@ Wire Wire Line
 Wire Wire Line
 	7100 2900 8050 2900
 $Comp
-L DigitalVFO:R_Small R8
+L DigitalVFO-rescue:R_Small-DigitalVFO R8
 U 1 1 5AB7B0A8
 P 7100 3550
 F 0 "R8" H 7150 3500 50  0000 L CNN
@@ -234,7 +234,7 @@ Wire Wire Line
 Wire Wire Line
 	7100 3650 7100 3750
 $Comp
-L DigitalVFO:C_Small C6
+L DigitalVFO-rescue:C_Small-DigitalVFO C6
 U 1 1 5AB7B2BD
 P 6450 5000
 F 0 "C6" H 6300 5100 50  0000 L CNN
@@ -257,7 +257,7 @@ F 3 "" H 6450 5100 50  0001 C CNN
 $EndComp
 Connection ~ 6650 4850
 $Comp
-L DigitalVFO:R_Small R9
+L DigitalVFO-rescue:R_Small-DigitalVFO R9
 U 1 1 5AB7B3DF
 P 6650 2350
 F 0 "R9" V 6750 2300 50  0000 L CNN
@@ -268,7 +268,7 @@ F 3 "" H 6650 2350 50  0001 C CNN
 	0    1    1    0   
 $EndComp
 $Comp
-L DigitalVFO:CP_Small C4
+L DigitalVFO-rescue:CP_Small-DigitalVFO C4
 U 1 1 5AB7B49C
 P 6950 2500
 F 0 "C4" H 6960 2570 50  0000 L CNN
@@ -279,7 +279,7 @@ F 3 "" H 6950 2500 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:R_Small R10
+L DigitalVFO-rescue:R_Small-DigitalVFO R10
 U 1 1 5AB7B4F4
 P 7300 2500
 F 0 "R10" H 7350 2450 50  0000 L CNN
@@ -315,7 +315,7 @@ Wire Wire Line
 Wire Wire Line
 	6750 2350 6950 2350
 $Comp
-L DigitalVFO:R_Small R1
+L DigitalVFO-rescue:R_Small-DigitalVFO R1
 U 1 1 5AB7C67F
 P 3200 900
 F 0 "R1" H 3250 950 50  0000 L CNN
@@ -326,7 +326,7 @@ F 3 "" H 3200 900 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:R_Small R2
+L DigitalVFO-rescue:R_Small-DigitalVFO R2
 U 1 1 5AB7C6C8
 P 3200 1200
 F 0 "R2" H 3250 1250 50  0000 L CNN
@@ -337,7 +337,7 @@ F 3 "" H 3200 1200 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:C_Small C1
+L DigitalVFO-rescue:C_Small-DigitalVFO C1
 U 1 1 5AB7C723
 P 3200 1500
 F 0 "C1" H 3210 1570 50  0000 L CNN
@@ -368,7 +368,7 @@ Connection ~ 3200 1350
 Wire Wire Line
 	3200 1600 3200 1700
 $Comp
-L DigitalVFO:R_Small R5
+L DigitalVFO-rescue:R_Small-DigitalVFO R5
 U 1 1 5AB7CFD2
 P 1750 2500
 F 0 "R5" H 1800 2550 50  0000 L CNN
@@ -379,7 +379,7 @@ F 3 "" H 1750 2500 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:R_Small R6
+L DigitalVFO-rescue:R_Small-DigitalVFO R6
 U 1 1 5AB7CFD8
 P 1750 2800
 F 0 "R6" H 1800 2850 50  0000 L CNN
@@ -390,7 +390,7 @@ F 3 "" H 1750 2800 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:C_Small C3
+L DigitalVFO-rescue:C_Small-DigitalVFO C3
 U 1 1 5AB7CFDE
 P 1750 3100
 F 0 "C3" H 1760 3170 50  0000 L CNN
@@ -421,7 +421,7 @@ Connection ~ 1750 2950
 Wire Wire Line
 	1750 3200 1750 3300
 $Comp
-L DigitalVFO:R_Small R3
+L DigitalVFO-rescue:R_Small-DigitalVFO R3
 U 1 1 5AB7D0D7
 P 2450 1700
 F 0 "R3" H 2500 1750 50  0000 L CNN
@@ -432,7 +432,7 @@ F 3 "" H 2450 1700 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:R_Small R4
+L DigitalVFO-rescue:R_Small-DigitalVFO R4
 U 1 1 5AB7D0DD
 P 2450 2000
 F 0 "R4" H 2500 2050 50  0000 L CNN
@@ -443,7 +443,7 @@ F 3 "" H 2450 2000 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:C_Small C2
+L DigitalVFO-rescue:C_Small-DigitalVFO C2
 U 1 1 5AB7D0E3
 P 2450 2300
 F 0 "C2" H 2460 2370 50  0000 L CNN
@@ -585,7 +585,7 @@ F 3 "" H 8600 3550 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:Conn_01x02 J2
+L DigitalVFO-rescue:Conn_01x02-DigitalVFO J2
 U 1 1 5AB7F850
 P 9100 4450
 F 0 "J2" H 9100 4600 50  0000 C CNN
@@ -596,7 +596,7 @@ F 3 "" H 9100 4500 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:D_ALT D1
+L DigitalVFO-rescue:D_ALT-DigitalVFO D1
 U 1 1 5AB7F8C6
 P 8250 4400
 F 0 "D1" H 8250 4500 50  0000 C CNN
@@ -607,7 +607,7 @@ F 3 "" H 8250 4400 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:C_Small C7
+L DigitalVFO-rescue:C_Small-DigitalVFO C7
 U 1 1 5AB7F925
 P 7750 4850
 F 0 "C7" H 7760 4920 50  0000 L CNN
@@ -648,7 +648,7 @@ $EndComp
 Wire Wire Line
 	8900 4500 8900 4650
 $Comp
-L DigitalVFO:DDS-60 U4
+L DigitalVFO-rescue:DDS-60-DigitalVFO U4
 U 1 1 5AB80E84
 P 6550 5850
 F 0 "U4" H 5400 6300 60  0000 C CNN
@@ -659,7 +659,7 @@ F 3 "" H 6550 6100 60  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:Conn_01x02 J3
+L DigitalVFO-rescue:Conn_01x02-DigitalVFO J3
 U 1 1 5AB813E8
 P 9000 5800
 F 0 "J3" H 9000 5950 50  0000 C CNN
@@ -670,7 +670,7 @@ F 3 "" H 9000 5850 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L DigitalVFO:R_Small R11
+L DigitalVFO-rescue:R_Small-DigitalVFO R11
 U 1 1 5AB81514
 P 8500 5600
 F 0 "R11" H 8550 5550 50  0000 L CNN
@@ -714,7 +714,7 @@ Connection ~ 7450 4750
 Wire Wire Line
 	7750 4950 7750 5050
 $Comp
-L DigitalVFO:C_Small C5
+L DigitalVFO-rescue:C_Small-DigitalVFO C5
 U 1 1 5AB87925
 P 6700 950
 F 0 "C5" H 6710 1020 50  0000 L CNN
@@ -741,7 +741,7 @@ Connection ~ 6700 750
 Wire Wire Line
 	6700 1050 6700 1100
 $Comp
-L DigitalVFO:Conn_Coaxial J1
+L DigitalVFO-rescue:Conn_Coaxial-DigitalVFO J1
 U 1 1 5AB8824F
 P 7050 4450
 F 0 "J1" H 6930 4460 50  0000 C CNN
@@ -1599,7 +1599,7 @@ $EndBitmap
 Wire Notes Line
 	7350 3800 9450 3800
 $Comp
-L DigitalVFO:R_Small R12
+L DigitalVFO-rescue:R_Small-DigitalVFO R12
 U 1 1 5AE2892A
 P 8100 3900
 F 0 "R12" V 8200 3850 50  0000 L CNN
@@ -1610,7 +1610,7 @@ F 3 "" H 8100 3900 50  0001 C CNN
 	0    1    1    0   
 $EndComp
 $Comp
-L DigitalVFO:R_Small R13
+L DigitalVFO-rescue:R_Small-DigitalVFO R13
 U 1 1 5AE28A8A
 P 7700 3900
 F 0 "R13" V 7800 3850 50  0000 L CNN
@@ -1628,7 +1628,7 @@ Wire Wire Line
 	8900 3900 8900 4400
 Connection ~ 8900 4400
 $Comp
-L DigitalVFO:C_Small C8
+L DigitalVFO-rescue:C_Small-DigitalVFO C8
 U 1 1 5AE28C83
 P 7900 4050
 F 0 "C8" H 7910 4120 50  0000 L CNN
@@ -1668,7 +1668,7 @@ Wire Wire Line
 Wire Wire Line
 	7500 3900 7600 3900
 $Comp
-L DigitalVFO:Teensy3.2 U2
+L DigitalVFO-rescue:Teensy3.2-DigitalVFO U2
 U 1 1 5AE2B0F8
 P 5500 2250
 F 0 "U2" H 4950 3400 60  0000 C CNN
