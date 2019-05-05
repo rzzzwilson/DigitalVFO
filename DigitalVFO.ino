@@ -42,6 +42,7 @@
 // DEBUG word for debugging program - bitmask values
 //#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
 #define DEBUG         0
+//#define DEBUG         0xff
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
@@ -1873,9 +1874,9 @@ void dds_tfr_byte(byte data)
 
 void dds_update(Frequency frequency)
 {
-#if (DEBUG & DEBUG_DDS)
-  Serial.printf(F("dds_update: frequency=%ld\n"), frequency);
-#endif
+//#if (DEBUG & DEBUG_DDS)
+//  Serial.printf(F("dds_update: frequency=%ld\n"), frequency);
+//#endif
 
   // if not online, do nothing
   if (VfoMode != vfo_Online)
@@ -2009,8 +2010,8 @@ void setup(void)
     ReHoldClickTime = DefaultHoldClickTime;    
     ReDClickTime = DefaultDClickTime;
     
-    Serial.printf(F("Resetting brightness to %d, contrast to %d and hold time to %d\n"),
-                  LcdBrightness, LcdContrast, ReHoldClickTime);
+    Serial.printf(F("Resetting brightness to %d, contrast to %d and hold/dclick times\n"),
+                  LcdBrightness, LcdContrast);
     Serial.printf(F("Click the RE button to continue...\n"));
 
     // show user we were reset
