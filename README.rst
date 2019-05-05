@@ -68,6 +68,17 @@ R3 instead of the FTDI FT232RL USB interface chip, but the AtMega is quite
 capable and can control the HeadlessVFO so I won't need any special USB
 interface chip.  Anyway, that's the current plan.
 
+Version 1.5
+===========
+
+5 May 2019 Update
+-----------------
+
+Noted corruption of the display and things like saved frequencies.  The DDS-60
+was being set to a **negative** frequency!  Investigated, but suspect this
+problem was caused by interference by connecting USB power to the Teensy while
+the VFO was running from the battery.  Debug by connecting USB power AT THE PC
+while the VFO is off.  See if the problem reoccurs whie doing that.
 
 Version 1.4
 ===========
