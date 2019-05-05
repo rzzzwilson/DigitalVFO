@@ -80,6 +80,11 @@ problem was caused by interference by connecting USB power to the Teensy while
 the VFO was running from the battery.  Debug by connecting USB power AT THE PC
 while the VFO is off.  See if the problem reoccurs whie doing that.
 
+Early 2019
+----------
+
+Modified the PCB layout to include test points for battery voltage, RF out, ground, etc.
+
 Version 1.4
 ===========
 
