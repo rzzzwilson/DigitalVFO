@@ -40,14 +40,14 @@
 #define DEBUG_BATT    (1 << 8)  // battery
 
 // DEBUG word for debugging program - bitmask values
-//#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
-#define DEBUG         0
+#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
+//#define DEBUG         0
 //#define DEBUG         0xff
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
-const char *Version = "1.5";
-const char *MinorVersion = ".2";
+const char *Version = "1.6";
+const char *MinorVersion = ".0";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -326,7 +326,7 @@ byte *BatterySymbol = battunder;
 /* restart the Teensy, without invoking bootloader. */
 void restart(void)
 {
-  Serial.printf(F("Restarting ...\n"));
+  Serial.print(F("Restarting ..."));
   delay(500);
   WRITE_RESTART(0x5FA0004);  
 }
@@ -334,7 +334,7 @@ void restart(void)
 /* reboot the Teensy, invoking bootloader. */
 void reboot(void)
 {
-  Serial.printf(F("Rebooting ...\n"));
+  Serial.print(F("Rebooting ..."));
   delay(500);
   _reboot_Teensyduino_();
 }
@@ -434,23 +434,23 @@ void DV_abort(const char *msg)
 void decode_debug_levels(int debug)
 {
   if (debug & DEBUG_DDS)
-    Serial.println(F("    DEBUG_DDS\tbit is set"));
+    Serial.print(F("    DEBUG_DDS\tbit is set\n"));
   if (debug & DEBUG_FREQ)
-    Serial.println(F("    DEBUG_FREQ\tbit is set"));
+    Serial.print(F("    DEBUG_FREQ\tbit is set\n"));
   if (debug & DEBUG_MENU)
-    Serial.println(F("    DEBUG_MENU\tbit is set"));
+    Serial.print(F("    DEBUG_MENU\tbit is set\n"));
   if (debug & DEBUG_EVENT)
-    Serial.println(F("    DEBUG_EVENT\tbit is set"));
+    Serial.print(F("    DEBUG_EVENT\tbit is set\n"));
   if (debug & DEBUG_ACT)
-    Serial.println(F("    DEBUG_ACT\tbit is set"));
+    Serial.print(F("    DEBUG_ACT\tbit is set\n"));
   if (debug & DEBUG_RE)
-    Serial.println(F("    DEBUG_RE\tbit is set"));
+    Serial.print(F("    DEBUG_RE\tbit is set\n"));
   if (debug & DEBUG_INT)
-    Serial.println(F("    DEBUG_INT\tbit is set"));
+    Serial.print(F("    DEBUG_INT\tbit is set\n"));
   if (debug & DEBUG_DISP)
-    Serial.println(F("    DEBUG_DISP\tbit is set"));
+    Serial.print(F("    DEBUG_DISP\tbit is set\n"));
   if (debug & DEBUG_BATT)
-    Serial.println(F("    DEBUG_BATT\tbit is set"));
+    Serial.print(F("    DEBUG_BATT\tbit is set\n"));
 }
 
 //----------------------------------------
@@ -500,16 +500,16 @@ void show_credits(bool minor)
 void banner(void)
 {
   show_credits(false);
-  delay(800);    // wait a bit
+  delay(500);    // wait a bit
 
   // do a fade out, clear screen then normal brightness
   for (int i = LcdBrightness; i; --i)
   {
     analogWrite(mc_Brightness, i);
-    delay(20);
+    delay(10);
   }
   lcd.clear();
-  delay(200);
+  delay(100);
   analogWrite(mc_Brightness, LcdBrightness);
 }
 
@@ -1960,7 +1960,7 @@ void setup(void)
   Serial.begin(19200);
 
 #if INIT_EEPROM
-  Serial.printf(F("Erasing EVERYTHING in EEPROM!\n"));
+  Serial.print(F("Erasing EVERYTHING in EEPROM!\n"));
   initialize_eeprom();  // WARNING! Destroys the EEPROM stored values
 #endif
 
@@ -1977,15 +1977,15 @@ void setup(void)
   pinMode(mc_Brightness, OUTPUT);
   pinMode(mc_Contrast, OUTPUT);
 
-  // get state back from EEPROM, set display brightness/contrast
-  restore_from_eeprom();
-  analogWrite(mc_Brightness, 0);    // display off while initializing
-  analogWrite(mc_Contrast, LcdContrast);
-
   // initialize the display
   lcd.begin(NumCols, NumRows);      // define display size
   lcd.noCursor();
   lcd.clear();
+
+  // get state back from EEPROM, set display brightness/contrast
+  restore_from_eeprom();
+  analogWrite(mc_Brightness, 0);    // display off while initializing
+  analogWrite(mc_Contrast, LcdContrast);
 
   // create underlined space for frequency display
   lcd.createChar(SpaceChar, sel_digits[SpaceIndex]);
@@ -2012,7 +2012,7 @@ void setup(void)
     
     Serial.printf(F("Resetting brightness to %d, contrast to %d and hold/dclick times\n"),
                   LcdBrightness, LcdContrast);
-    Serial.printf(F("Click the RE button to continue...\n"));
+    Serial.print(F("Click the RE button to continue..."));
 
     // show user we were reset
     lcd.clear();
@@ -2031,16 +2031,7 @@ void setup(void)
     delay(500);
   }
   
-#if (DEBUG != 0)
-  Serial.printf(F("\n"));
-  Serial.printf(F("*************************************************\n"));
-  Serial.printf(F("*            %s %s%s (%s)           *\n"),
-                ProgramName, Version, MinorVersion, Callsign);
-  Serial.printf(F("*************************************************\n"));
-  Serial.printf(F("\n"));
-#else
   Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
-#endif
 
 #if (DEBUG != 0)
   Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
@@ -2068,7 +2059,7 @@ void setup(void)
   
   // show the main screen and continue in loop()
   show_main_screen();
-  Serial.printf(F("\nReady!\n"));
+  Serial.print(F("Ready!\n"));
 }
 
 //----------------------------------------
