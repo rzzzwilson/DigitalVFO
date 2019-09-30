@@ -255,9 +255,9 @@ const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
 // battery voltage limits
-const float OverVoltage = 8.35;   // battery voltage for CHARGING & FULL
-const float MaxVoltage = 8.0;     // battery voltage for "100% full"
-const float MinVoltage = 6.48;    // battery voltage for "0% full"
+const float OverVoltage = 7.90;   // battery voltage for CHARGING & FULL
+const float MaxVoltage = 7.80;    // battery voltage for "100% full"
+const float MinVoltage = 6.50;    // battery voltage for "0% full"
                                   // BMS disconnects at around 6.40v
 const float NoBattVoltage = 5.5;  // if at or below this, no battery
 
