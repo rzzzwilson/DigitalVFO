@@ -342,7 +342,7 @@ void reboot(void)
 // Overwrite everything in the EEPROM.
 //----------------------------------------
 
-#if INIT_EEPROM
+#if INIT_EEPROM != 0
 
 void initialize_eeprom()
 {
@@ -1958,7 +1958,7 @@ void setup(void)
   // initialize the serial console
   Serial.begin(19200);
 
-#if INIT_EEPROM
+#if INIT_EEPROM != 0
   Serial.print(F("Erasing EVERYTHING in EEPROM!\n"));
   initialize_eeprom();  // WARNING! Destroys the EEPROM stored values
 #endif
