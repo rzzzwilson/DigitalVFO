@@ -38,16 +38,18 @@
 #define DEBUG_INT     (1 << 6)  // interrupts
 #define DEBUG_DISP    (1 << 7)  // display
 #define DEBUG_BATT    (1 << 8)  // battery
+#define DEBUG_MISC    (1 << 9)  // usually just debugging
 
 // DEBUG word for debugging program - bitmask values
-#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
+#define DEBUG         (DEBUG_MISC + DEBUG_EVENT)
+//#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
 //#define DEBUG         0
 //#define DEBUG         0xff
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.6";
-const char *MinorVersion = ".0";
+const char *MinorVersion = ".1";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -223,10 +225,6 @@ const int EventQueueLength = 10;
 
 
 //-----
-// VFO modes.  Online or standby.
-//-----
-
-//-----
 // Miscellaneous.
 //-----
 
@@ -325,7 +323,7 @@ byte *BatterySymbol = battunder;
 /* restart the Teensy, without invoking bootloader. */
 void restart(void)
 {
-  Serial.print(F("Restarting ..."));
+  Serial.print("Restarting ...");
   delay(500);
   WRITE_RESTART(0x5FA0004);  
 }
@@ -333,7 +331,7 @@ void restart(void)
 /* reboot the Teensy, invoking bootloader. */
 void reboot(void)
 {
-  Serial.print(F("Rebooting ..."));
+  Serial.print("Rebooting ...");
   delay(500);
   _reboot_Teensyduino_();
 }
@@ -346,6 +344,8 @@ void reboot(void)
 
 void initialize_eeprom()
 {
+  Serial.print("Erasing EVERYTHING in EEPROM!\n");
+  delay(3000);
   EEPROM.put(EepromFreq, DefaultFrequency);
   EEPROM.put(EepromSelDigit, DefaultSelDigit);
   EEPROM.put(EepromVfoClockOffset, DefaultVfoClockOffset);
@@ -390,7 +390,7 @@ void DV_abort(const char *msg)
   char *ptr = buf;
   
   // print error on console (maybe)
-  Serial.printf(F("message=%s\nTeensy is paused!\n"), msg);
+  Serial.printf("message=%s\nTeensy is paused!\n", msg);
 
   // truncate/pad message to NumRows * NumCols chars
   for (int i = 0; i < NumCols*NumRows; ++i)
@@ -433,23 +433,25 @@ void DV_abort(const char *msg)
 void decode_debug_levels(int debug)
 {
   if (debug & DEBUG_DDS)
-    Serial.print(F("    DEBUG_DDS\tbit is set\n"));
+    Serial.printf("    DEBUG_DDS\tbit is set: %06x\n", DEBUG_DDS);
   if (debug & DEBUG_FREQ)
-    Serial.print(F("    DEBUG_FREQ\tbit is set\n"));
+    Serial.printf("    DEBUG_FREQ\tbit is set: %06x\n", DEBUG_FREQ);
   if (debug & DEBUG_MENU)
-    Serial.print(F("    DEBUG_MENU\tbit is set\n"));
+    Serial.printf("    DEBUG_MENU\tbit is set: %06x\n", DEBUG_MENU);
   if (debug & DEBUG_EVENT)
-    Serial.print(F("    DEBUG_EVENT\tbit is set\n"));
+    Serial.printf("    DEBUG_EVENT\tbit is set: %06x\n", DEBUG_EVENT);
   if (debug & DEBUG_ACT)
-    Serial.print(F("    DEBUG_ACT\tbit is set\n"));
+    Serial.printf("    DEBUG_ACT\tbit is set: %06x\n", DEBUG_ACT);
   if (debug & DEBUG_RE)
-    Serial.print(F("    DEBUG_RE\tbit is set\n"));
+    Serial.printf("    DEBUG_RE\tbit is set: %06x\n", DEBUG_RE);
   if (debug & DEBUG_INT)
-    Serial.print(F("    DEBUG_INT\tbit is set\n"));
+    Serial.printf("    DEBUG_INT\tbit is set: %06x\n", DEBUG_INT);
   if (debug & DEBUG_DISP)
-    Serial.print(F("    DEBUG_DISP\tbit is set\n"));
+    Serial.printf("    DEBUG_DISP\tbit is set: %06x\n", DEBUG_DISP);
   if (debug & DEBUG_BATT)
-    Serial.print(F("    DEBUG_BATT\tbit is set\n"));
+    Serial.printf("    DEBUG_BATT\tbit is set: %06x\n", DEBUG_BATT);
+  if (debug & DEBUG_MISC)
+    Serial.printf("    DEBUG_MISC\tbit is set: %06x\n", DEBUG_MISC);
 }
 
 //----------------------------------------
@@ -509,6 +511,19 @@ void banner(void)
   }
   lcd.clear();
   delay(100);
+  analogWrite(mc_Brightness, LcdBrightness);
+}
+
+void fade_out(void)
+{
+  // do a fade out, clear screen then normal brightness
+  for (int i = LcdBrightness; i; --i)
+  {
+    analogWrite(mc_Brightness, i);
+    delay(10);
+  }
+  lcd.clear();
+  delay(300);
   analogWrite(mc_Brightness, LcdBrightness);
 }
 
@@ -652,9 +667,7 @@ void measure_battery(void)
 
 #if (DEBUG & DEBUG_BATT)
   if (++batt_report_count > 0)
-  {
-    Serial.printf(F("volts: %.2fv, "), AverageVoltage);
-  }
+    Serial.printf("volts: %.2fv, ", AverageVoltage);
 #endif
 
   // figure out which battery symbol to use
@@ -663,9 +676,7 @@ void measure_battery(void)
     BatterySymbol = battnone;
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
-    {
-      Serial.printf(F("no battery\n"));
-    }
+      Serial.printf("no battery\n");
 #endif      
   }
   else if (AverageVoltage < MinVoltage)
@@ -673,9 +684,7 @@ void measure_battery(void)
     BatterySymbol = battunder;
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
-    {
-      Serial.printf(F("battery under voltage\n"));
-    }
+      Serial.printf("battery under voltage\n");
 #endif      
   }
   else if (AverageVoltage > OverVoltage)
@@ -683,9 +692,7 @@ void measure_battery(void)
     BatterySymbol = battover;
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
-    {
-      Serial.printf(F("OVER VOLTAGE\n"));
-    }
+      Serial.printf("OVER VOLTAGE\n");
 #endif      
   }
   else
@@ -695,17 +702,13 @@ void measure_battery(void)
     BatterySymbol = batt_syms[batt_bucket + 1];
 #if (DEBUG & DEBUG_BATT)
     if (batt_report_count > 0)
-    {
-      Serial.printf(F("batt_bucket=%d\n"), batt_bucket+1);
-    }
+      Serial.printf("batt_bucket=%d\n", batt_bucket+1);
 #endif
   }
 
 #if (DEBUG & DEBUG_BATT)
   if (batt_report_count > 0)
-  {
     batt_report_count = -ReportVoltageDelay;
-  }
 #endif
 }
 
@@ -733,19 +736,19 @@ void measure_battery(void)
 
 const char * xcmd_help(char *answer, char *cmd)
 {
-  strcpy(answer, (char *) F("\n-----------Interactive Commands-----------------\n"));
-  strcat(answer, (char *) F("H;           send help text to console\n"));
-  strcat(answer, (char *) F("BH;          boot hard, reload software via USB\n"));
-  strcat(answer, (char *) F("BS;          boot soft, restart program\n"));
-  strcat(answer, (char *) F("DE;          dump EEPROM\n"));
-  strcat(answer, (char *) F("ID;          get device identifier string\n"));
-  strcat(answer, (char *) F("MO;          set VFO mode to 'online'\n"));
-  strcat(answer, (char *) F("MS;          set VFO mode to 'standby'\n"));
-  strcat(answer, (char *) F("MG;          get VFO mode\n"));
-  strcat(answer, (char *) F("FSnnnnnnnn;  set frequency to 'nnnnnnnn'\n"));
-  strcat(answer, (char *) F("FG;          get frequency\n"));
-  strcat(answer, (char *) F("VG;          get battery voltage\n"));
-  strcat(answer, (char *) F("------------------------------------------------\n"));
+  strcpy(answer, (char *) "\n-----------Interactive Commands-----------------\n");
+  strcat(answer, (char *) "H;           send help text to console\n");
+  strcat(answer, (char *) "BH;          boot hard, reload software via USB\n");
+  strcat(answer, (char *) "BS;          boot soft, restart program\n");
+  strcat(answer, (char *) "DE;          dump EEPROM\n");
+  strcat(answer, (char *) "ID;          get device identifier string\n");
+  strcat(answer, (char *) "MO;          set VFO mode to 'online'\n");
+  strcat(answer, (char *) "MS;          set VFO mode to 'standby'\n");
+  strcat(answer, (char *) "MG;          get VFO mode\n");
+  strcat(answer, (char *) "FSnnnnnnnn;  set frequency to 'nnnnnnnn'\n");
+  strcat(answer, (char *) "FG;          get frequency\n");
+  strcat(answer, (char *) "VG;          get battery voltage\n");
+  strcat(answer, (char *) "------------------------------------------------\n");
   return answer;
 }
 
@@ -1011,10 +1014,10 @@ struct Menu
 
 void dump_menuitem(struct MenuItem *menuitem)
 {
-  Serial.printf(F("  menuitem address=%08x\n"), menuitem);
-  Serial.printf(F("  title=%s\n"), menuitem->title);
-  Serial.printf(F("  menu=%08x\n"), menuitem->menu);
-  Serial.printf(F("  action=%08x\n"), menuitem->action);
+  Serial.printf("  menuitem address=%08x\n", menuitem);
+  Serial.printf("  title=%s\n", menuitem->title);
+  Serial.printf("  menu=%08x\n", menuitem->menu);
+  Serial.printf("  action=%08x\n", menuitem->action);
 }
 
 //----------------------------------------
@@ -1023,17 +1026,17 @@ void dump_menuitem(struct MenuItem *menuitem)
 
 void dump_menu(const char *msg, struct Menu *menu)
 {
-  Serial.printf(F("----------------- Menu --------------------\n"));
-  Serial.printf(F("%s\n"), msg);
-  Serial.printf(F("menu address=%08x\n"), menu);
-  Serial.printf(F("  title=%s\n"), menu->title);
-  Serial.printf(F("  num_items=%d\n"), menu->num_items);
-  Serial.printf(F("  items address=%08x\n"), menu->items);
+  Serial.printf("----------------- Menu --------------------\n");
+  Serial.printf("%s\n", msg);
+  Serial.printf("menu address=%08x\n", menu);
+  Serial.printf("  title=%s\n", menu->title);
+  Serial.printf("  num_items=%d\n", menu->num_items);
+  Serial.printf("  items address=%08x\n", menu->items);
   
   for (int i = 0; i < menu->num_items; ++i)
     dump_menuitem(menu->items[i]);
     
-  Serial.printf(F("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"));
+  Serial.printf("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n");
 }
 #endif
 
@@ -1106,38 +1109,38 @@ void menu_show(struct Menu *menu, int unused)
       // get next event and handle it
       byte event = event_pop();
 #if (DEBUG & DEBUG_MENU)
-      Serial.printf(F("menu_show loop: event=%s\n"), event2display(event));
+      Serial.printf("menu_show loop: event=%s\n", event2display(event));
 #endif
 
       switch (event)
       {
         case vfo_RLeft:
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: vfo_RLeft\n"));
+          Serial.printf("menu_show: vfo_RLeft\n");
 #endif
           if (--item_num < 0)
             item_num = 0;
           break;
         case vfo_RRight:
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: vfo_RRight\n"));
+          Serial.printf("menu_show: vfo_RRight\n");
 #endif
           if (++item_num >= menu->num_items)
             item_num = menu->num_items - 1;
           break;
         case vfo_DnRLeft:
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: vfo_DnRLeft (ignored)\n"));
+          Serial.printf("menu_show: vfo_DnRLeft (ignored)\n");
 #endif
           break;
         case vfo_DnRRight:
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: vfo_DnRRight (ignored)\n"));
+          Serial.printf("menu_show: vfo_DnRRight (ignored)\n");
 #endif
           break;
         case vfo_Click:
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: vfo_Click\n"));
+          Serial.printf("menu_show: vfo_Click\n");
 #endif
           if (menu->items[item_num]->action != NULL)
           {
@@ -1152,18 +1155,18 @@ void menu_show(struct Menu *menu, int unused)
           }
           menu_draw(menu);    // redraw the menu header, item redrawn below
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: end of vfo_Click handling\n"));
+          Serial.printf("menu_show: end of vfo_Click handling\n");
 #endif
           break;
         case vfo_HoldClick:
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: vfo_HoldClick, exit menu\n"));
+          Serial.printf("menu_show: vfo_HoldClick, exit menu\n");
 #endif
           event_flush();
           return;             // back to the parent menu or main screen
         default:
 #if (DEBUG & DEBUG_MENU)
-          Serial.printf(F("menu_show: unrecognized event %d\n"), event);
+          Serial.printf("menu_show: unrecognized event %d\n", event);
 #endif
           break;
       }
@@ -1181,13 +1184,13 @@ void menu_show(struct Menu *menu, int unused)
 
 void display_flash(void)
 {
-  lcd.noDisplay();
-  delay(150);
-  lcd.display();
-  delay(150);
-  lcd.noDisplay();
-  delay(150);
-  lcd.display();
+    for (int x = 0; x < 4; ++x)
+  {
+    lcd.noDisplay();
+    delay(50);
+    lcd.display();
+    delay(50);
+  }
 }
 
 
@@ -1216,7 +1219,7 @@ int queue_aft = 0;    // points at next free slot for a pushed event
 void event_push(VFOEvent event)
 {
 #if (DEBUG & DEBUG_EVENT)
-  Serial.printf(F("event_push: pushing %s\n"), event2display(event));
+  Serial.printf("event_push: pushing %s\n", event2display(event));
 #endif
 
   // put new event into next empty slot
@@ -1264,7 +1267,7 @@ VFOEvent event_pop(void)
   interrupts();
 
 #if (DEBUG & DEBUG_EVENT)
-  Serial.printf(F("event_pop: popping %s\n"), event2display(event));
+  Serial.printf("event_pop: popping %s\n", event2display(event));
 #endif
 
   return event;
@@ -1317,21 +1320,21 @@ void event_dump_queue(const char *msg)
   // Must protect from RE code fiddling with queue
   noInterrupts();
 
-  Serial.printf(F("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"));
-  Serial.printf(F("Queue: %s\n"), msg);
+  Serial.printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+  Serial.printf("Queue: %s\n", msg);
   for (int i = 0; i < EventQueueLength; ++i)
   {
     VFOEvent event = event_queue[i];
 
-    Serial.printf(F("  %d -> %s\n"), i, event2display(event));
+    Serial.printf("  %d -> %s\n", i, event2display(event));
   }
   if (event_pending() == 0)
-    Serial.printf(F("Queue length=0 (or %d)\n"), EventQueueLength);
+    Serial.printf("Queue length=0 (or %d)\n", EventQueueLength);
   else
-    Serial.printf(F("Queue length=%d\n"), event_pending());
-  Serial.printf(F("queue_aft=%d"), queue_aft);
-  Serial.printf(F(", queue_fore=%d\n"), queue_fore);
-  Serial.printf(F("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"));
+    Serial.printf("Queue length=%d\n", event_pending());
+  Serial.printf("queue_aft=%d", queue_aft);
+  Serial.printf(", queue_fore=%d\n", queue_fore);
+  Serial.printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 
   interrupts();
 }
@@ -1389,7 +1392,7 @@ void display_sel_value(ULONG value, int sel_col, int num_digits, int col, int ro
   int index = num_digits - sel_col - 1;
 
 #if (DEBUG & DEBUG_DISPLAY)
-  Serial.printf(F("display_sel_value: value=%ld, sel_col=%d, num_digits=%d, col=%d, row=%d"),
+  Serial.printf("display_sel_value: value=%ld, sel_col=%d, num_digits=%d, col=%d, row=%d",
                    value, sel_col, num_digits, col, row);
 #endif
 
@@ -1456,7 +1459,7 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
   char prefix = '+';
 
 #if (DEBUG & DEBUG_ACT)
-  Serial.printf(F("display_sel_offset: value=%d, sel_col=%d, num_digits=%d, col=%d, row=%d\n"),
+  Serial.printf("display_sel_offset: value=%d, sel_col=%d, num_digits=%d, col=%d, row=%d\n",
                 value, sel_col, num_digits, col, row);
 #endif
 
@@ -1567,13 +1570,13 @@ void pinPush_isr(void)
   // sample the pin value
   re_down = digitalRead(re_pinPush);
 #if (DEBUG & DEBUG_INT)
-    Serial.printf(F("pinPush_isr: re_down=0x%02X\n"), re_down);
+    Serial.printf("pinPush_isr: re_down=0x%02X\n", re_down);
 #endif
   
   if (re_down)
   {
 #if (DEBUG & DEBUG_INT)
-    Serial.printf(F("pinPush_isr: button DOWN\n"));
+    Serial.printf("pinPush_isr: button DOWN\n");
 #endif
   
     // button pushed down
@@ -1583,7 +1586,7 @@ void pinPush_isr(void)
   else
   {
 #if (DEBUG & DEBUG_INT)
-    Serial.printf(F("pinPush_isr: button UP\n"));
+    Serial.printf("pinPush_isr: button UP\n");
 #endif
   
     // button released, check if rotation, UP event if not
@@ -1639,7 +1642,7 @@ void pinA_isr(void)
   byte pin_B = digitalRead(re_pinB);
   
 #if (DEBUG & DEBUG_INT)
-    Serial.printf(F("pinA_isr: pin_A=0x%02X, pin_B=0x%02X\n"), pin_A, pin_B);
+    Serial.printf("pinA_isr: pin_A=0x%02X, pin_B=0x%02X\n", pin_A, pin_B);
 #endif
   
   if (pin_A && pin_B && aFlag)
@@ -1676,7 +1679,7 @@ void pinB_isr(void)
   byte pin_B = digitalRead(re_pinB);
 
 #if (DEBUG & DEBUG_INT)
-    Serial.printf(F("pinB_isr: pin_A=0x%02X, pin_B=0x%02X\n"), pin_A, pin_B);
+    Serial.printf("pinB_isr: pin_A=0x%02X, pin_B=0x%02X\n", pin_A, pin_B);
 #endif
   
   if (pin_A && pin_B && bFlag)
@@ -1774,7 +1777,7 @@ void put_slot(int slot_num, Frequency freq, SelOffset offset)
 // Print all EEPROM saved data to console.
 //----------------------------------------
 
-#define DELAY_MS 20  // not sure why we need a delay to print reliably
+#define DELAY_MS 100  // not sure why we need a delay to print reliably
 
 void dump_eeprom(void)
 {
@@ -1796,36 +1799,29 @@ void dump_eeprom(void)
   EEPROM.get(EepromDClickTime, dclick);
   EEPROM.get(EepromVoltsCalibrate, volt_calib);
   
-  Serial.printf(F("=================================================\n"));
-  delay(DELAY_MS);
-  Serial.printf(F("dump_eeprom:\n"));
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  VfoFrequency=%ld\n"), EepromFreq, sizeof(Frequency), freq);
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  EepromSelDigit=%d\n"), EepromSelDigit, sizeof(SelOffset), offset);
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  VfoClockOffset=%d\n"), EepromVfoClockOffset, sizeof(VfoClockOffset), clkoffset);
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  LcdContrast=%d\n"), EepromContrast, sizeof(LcdContrast), contrast);
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  LcdBrightness=%d\n"), EepromBrightness, sizeof(LcdBrightness), brightness);
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  ReHoldClickTime=%dmsec\n"), EepromHoldClickTime, sizeof(ReHoldClickTime), hold);
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  ReDClickTime=%dmsec\n"), EepromDClickTime, sizeof(ReDClickTime), dclick);
-  delay(DELAY_MS);
-  Serial.printf(F("   %2d (%d)  VoltsCalibrate=%d\n"), EepromVoltsCalibrate, sizeof(VoltsCalibrate), volt_calib);
+  Serial.printf("=================================================\n");
+  Serial.printf("dump_eeprom:\n");
+  Serial.printf("offset size  value\n");
+  Serial.printf("------ ----  -----\n");
+  Serial.printf("   %3d  (%d)  VfoFrequency=%ld\n", EepromFreq, sizeof(Frequency), freq);
+  Serial.printf("   %3d  (%d)  EepromSelDigit=%d\n", EepromSelDigit, sizeof(SelOffset), offset);
+  Serial.printf("   %3d  (%d)  VfoClockOffset=%d\n", EepromVfoClockOffset, sizeof(VfoClockOffset), clkoffset);
+  Serial.printf("   %3d  (%d)  LcdContrast=%d\n", EepromContrast, sizeof(LcdContrast), contrast);
+  Serial.printf("   %3d  (%d)  LcdBrightness=%d\n", EepromBrightness, sizeof(LcdBrightness), brightness);
+  Serial.printf("   %3d  (%d)  ReHoldClickTime=%dmsec\n", EepromHoldClickTime, sizeof(ReHoldClickTime), hold);
+  Serial.printf("   %3d  (%d)  ReDClickTime=%dmsec\n", EepromDClickTime, sizeof(ReDClickTime), dclick);
+  Serial.printf("   %3d  (%d)  VoltsCalibrate=%d\n", EepromVoltsCalibrate, sizeof(VoltsCalibrate), volt_calib);
+
   delay(DELAY_MS);
 
   for (int i = 0; i < NumSaveSlots; ++i)
   {
     get_slot(i, freq, offset);
-    Serial.printf(F("Slot %d: freq=%ld, seldig=%d\n"), i, freq, offset);
+    Serial.printf("Slot %d: freq=%ld, seldig=%d\n", i, freq, offset);
     delay(DELAY_MS);
   }
 
-  Serial.printf(F("=================================================\n"));
-  delay(DELAY_MS);
+  Serial.printf("=================================================\n");
 }
 
 //##############################################################################
@@ -1874,7 +1870,7 @@ void dds_tfr_byte(byte data)
 void dds_update(Frequency frequency)
 {
 //#if (DEBUG & DEBUG_DDS)
-//  Serial.printf(F("dds_update: frequency=%ld\n"), frequency);
+//  Serial.printf("dds_update: frequency=%ld\n", frequency);
 //#endif
 
   // if not online, do nothing
@@ -1885,7 +1881,7 @@ void dds_update(Frequency frequency)
   ULONG data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
 
 #if (DEBUG & DEBUG_DDS)
-  Serial.printf(F("dds_update: ONLINE: frequency=%ld, VfoClockOffset=%d, data=%ld\n"),
+  Serial.printf("dds_update: ONLINE: frequency=%ld, VfoClockOffset=%d, data=%ld\n",
                 frequency, VfoClockOffset, data);
 #endif
 
@@ -1906,7 +1902,7 @@ void dds_update(Frequency frequency)
 void dds_standby(void)
 {
 #if (DEBUG & DEBUG_DDS)
-  Serial.printf(F("DDS into standby mode.\n"));
+  Serial.printf("DDS into standby mode.\n");
 #endif
   dds_update(0L);
 }
@@ -1918,7 +1914,7 @@ void dds_standby(void)
 void dds_online(void)
 {
 #if (DEBUG & DEBUG_FREQ)
-  Serial.printf(F("DDS into online mode, frequency=%dHz.\n"), VfoFrequency);
+  Serial.printf("DDS into online mode, frequency=%dHz.\n", VfoFrequency);
 #endif
   dds_update(VfoFrequency);
 }
@@ -1959,7 +1955,6 @@ void setup(void)
   Serial.begin(19200);
 
 #if INIT_EEPROM != 0
-  Serial.print(F("Erasing EVERYTHING in EEPROM!\n"));
   initialize_eeprom();  // WARNING! Destroys the EEPROM stored values
 #endif
 
@@ -1983,8 +1978,11 @@ void setup(void)
 
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
-  analogWrite(mc_Brightness, 0);    // display off while initializing
+  analogWrite(mc_Brightness, LcdBrightness);    // display off while initializing
   analogWrite(mc_Contrast, LcdContrast);
+
+  // show program name and version number
+  show_credits(false);
 
   // create underlined space for frequency display
   lcd.createChar(SpaceChar, sel_digits[SpaceIndex]);
@@ -2009,9 +2007,9 @@ void setup(void)
     ReHoldClickTime = DefaultHoldClickTime;    
     ReDClickTime = DefaultDClickTime;
     
-    Serial.printf(F("Resetting brightness to %d, contrast to %d and hold/dclick times\n"),
+    Serial.printf("Resetting brightness to %d, contrast to %d and hold/dclick times\n",
                   LcdBrightness, LcdContrast);
-    Serial.print(F("Click the RE button to continue..."));
+    Serial.print("Click the RE button to continue...");
 
     // show user we were reset
     lcd.clear();
@@ -2029,26 +2027,6 @@ void setup(void)
     lcd.clear();
     delay(500);
   }
-  
-  Serial.printf(F("%s %s%s (%s)\n"), ProgramName, Version, MinorVersion, Callsign);
-
-#if (DEBUG != 0)
-  Serial.printf(F("DEBUG is defined as %06X:\n"), DEBUG);
-  decode_debug_levels(DEBUG);
-//#else
-//  Serial.println(F("DEBUG is not turned on."));
-#endif
-
-  // dump EEPROM values
-#if (DEBUG != 0)
-  dump_eeprom();
-#endif
-
-  Serial.printf(F("Preparing screen ... "));
-
-  // show program name and version number
-  analogWrite(mc_Brightness, LcdBrightness);    // display ON for banner
-  banner();
 
   // eat any events that may have been generated
   event_flush();
@@ -2056,9 +2034,20 @@ void setup(void)
   // measure voltage once, put into AverageVoltage
   AverageVoltage = get_volts();
   
+  fade_out();
+  
+  Serial.printf("%s %s%s (%s)\n", ProgramName, Version, MinorVersion, Callsign);
+  
+  // if *any* DEBUG turned on, explain state
+#if (DEBUG != 0)
+  Serial.printf("DEBUG is defined as %06X:\n", DEBUG);
+  decode_debug_levels(DEBUG);
+  dump_eeprom();
+#endif
+
   // show the main screen and continue in loop()
   show_main_screen();
-  Serial.print(F("Ready!\n"));
+  Serial.print("Ready!\n");
 }
 
 //----------------------------------------
@@ -2069,16 +2058,11 @@ void setup(void)
 void show_main_screen(void)
 {
   lcd.clear();
-  lcd.setCursor(0, 0);
-//  lcd.print("Vfo:");
   display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
   lcd.print("Hz");
 
   lcd.setCursor(0, 1);
-  lcd.write(BlankRow);
-  lcd.setCursor(0, 1);
   lcd.write(mode2display(VfoMode));
-
 }
 
 //----------------------------------------
@@ -2429,7 +2413,7 @@ void brightness_action(struct Menu *menu, int item_num)
       LcdBrightness = index * 16 - 1;
       analogWrite(mc_Brightness, LcdBrightness);
 #if (DEBUG & DEBUG_ACT)
-      Serial.printf(F("brightness_action: brightness set to %d\n"), LcdBrightness);
+      Serial.printf("brightness_action: brightness set to %d\n", LcdBrightness);
 #endif
 
       // show brightness value in row 1
@@ -2510,7 +2494,7 @@ void contrast_action(struct Menu *menu, int item_num)
       LcdContrast = index * 16;
       analogWrite(mc_Contrast, LcdContrast);
 #if (DEBUG & DEBUG_ACT)
-      Serial.printf(F("contrast_action: contrast set to %d\n"), LcdContrast);
+      Serial.printf("contrast_action: contrast set to %d\n", LcdContrast);
 #endif
 
       // show brightness value in row 1
@@ -2582,7 +2566,7 @@ void holdclick_action(struct Menu *menu, int item_num)
           if (holdtime < MinHoldClickTime)
             holdtime = MinHoldClickTime;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("holdclick_action: vfo_RLeft, after holdtime=%d\n"), holdtime);
+          Serial.printf("holdclick_action: vfo_RLeft, after holdtime=%d\n", holdtime);
 #endif
           break;
         case vfo_RRight:
@@ -2590,7 +2574,7 @@ void holdclick_action(struct Menu *menu, int item_num)
           if (holdtime > MaxHoldClickTime)
             holdtime = MaxHoldClickTime;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("holdclick_action: vfo_RRight, after holdtime=%d\n"), holdtime);
+          Serial.printf("holdclick_action: vfo_RRight, after holdtime=%d\n", holdtime);
 #endif
           break;
         case vfo_Click:
@@ -2650,7 +2634,7 @@ void doubleclick_action(struct Menu *menu, int item_num)
           if (dctime < MinDClickTime)
             dctime = MinDClickTime;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("doubleclick_action: vfo_RLeft, after dctime=%d\n"), dctime);
+          Serial.printf("doubleclick_action: vfo_RLeft, after dctime=%d\n", dctime);
 #endif
           break;
         case vfo_RRight:
@@ -2658,7 +2642,7 @@ void doubleclick_action(struct Menu *menu, int item_num)
           if (dctime > MaxDClickTime)
             dctime = MaxDClickTime;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("doubleclick_action: vfo_RRight, after dctime=%d\n"), dctime);
+          Serial.printf("doubleclick_action: vfo_RRight, after dctime=%d\n", dctime);
 #endif
           break;
         case vfo_Click:
@@ -2729,7 +2713,7 @@ void freq_calibrate_action(struct Menu *menu, int item_num)
           if (VfoClockOffset < MinClockOffset)
             VfoClockOffset = MinClockOffset;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_freq_action: vfo_RLeft, after VfoClockOffset=%d\n"),
+          Serial.printf("calibrate_freq_action: vfo_RLeft, after VfoClockOffset=%d\n",
                         VfoClockOffset);
 #endif
           break;
@@ -2738,31 +2722,31 @@ void freq_calibrate_action(struct Menu *menu, int item_num)
           if (VfoClockOffset > MaxClockOffset)
             VfoClockOffset = MaxClockOffset;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_freq_action: vfo_RRight, after VfoClockOffset=%d\n"),
+          Serial.printf("calibrate_freq_action: vfo_RRight, after VfoClockOffset=%d\n",
                         VfoClockOffset);
 #endif
           break;
         case vfo_DnRLeft:
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_freq_action: vfo_DnRLeft\n"));
+          Serial.printf("calibrate_freq_action: vfo_DnRLeft\n");
 #endif
           ++seldig;
           if (seldig >= MaxOffsetDigits)
             seldig = MaxOffsetDigits - 1;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_freq_action: vfo_DnRLeft, after seldig=%d\n"),
+          Serial.printf("calibrate_freq_action: vfo_DnRLeft, after seldig=%d\n",
                         seldig);
 #endif
           break;
         case vfo_DnRRight:
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_freq_action: vfo_DnRLeft\n"));
+          Serial.printf("calibrate_freq_action: vfo_DnRLeft\n");
 #endif
           --seldig;
           if (seldig < 0)
             seldig = 0;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("calibrate_freq_action: vfo_DnRRight, after seldig=%d\n"),
+          Serial.printf("calibrate_freq_action: vfo_DnRRight, after seldig=%d\n",
                         seldig);
 #endif
           break;
@@ -2836,7 +2820,7 @@ void volts_calibrate_action(struct Menu *menu, int item_num)
           if (VoltsCalibrate < MinVoltsCalibrate)
             VoltsCalibrate = MinVoltsCalibrate;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("volts_calibrate_action: vfo_RLeft, after VoltsCalibrate=%d\n"),
+          Serial.printf("volts_calibrate_action: vfo_RLeft, after VoltsCalibrate=%d\n",
                         VoltsCalibrate);
 #endif
           break;
@@ -2845,31 +2829,31 @@ void volts_calibrate_action(struct Menu *menu, int item_num)
           if (VoltsCalibrate > MaxVoltsCalibrate)
             VoltsCalibrate = MaxVoltsCalibrate;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("volts_calibrate_action: vfo_RRight, after VoltsCalibrate=%d\n"),
+          Serial.printf("volts_calibrate_action: vfo_RRight, after VoltsCalibrate=%d\n",
                         VoltsCalibrate);
 #endif
           break;
         case vfo_DnRLeft:
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("volts_calibrate_action: vfo_DnRLeft\n"));
+          Serial.printf("volts_calibrate_action: vfo_DnRLeft\n");
 #endif
           ++seldig;
           if (seldig >= MaxOffsetDigits)
             seldig = MaxOffsetDigits - 1;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("volts_calibrate_action: vfo_DnRLeft, after seldig=%d\n"),
+          Serial.printf("volts_calibrate_action: vfo_DnRLeft, after seldig=%d\n",
                         seldig);
 #endif
           break;
         case vfo_DnRRight:
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("volts_calibrate_action: vfo_DnRLeft\n"));
+          Serial.printf("volts_calibrate_action: vfo_DnRLeft\n");
 #endif
           --seldig;
           if (seldig < 0)
             seldig = 0;
 #if (DEBUG & DEBUG_ACT)
-          Serial.printf(F("volts_calibrate_action: vfo_DnRRight, after seldig=%d\n"),
+          Serial.printf("volts_calibrate_action: vfo_DnRRight, after seldig=%d\n",
                         seldig);
 #endif
           break;
@@ -2977,7 +2961,7 @@ void do_external_commands(void)
       char answer[512];    // place to construct answer strings
       
       CommandBuffer[CommandIndex] = '\0';
-      Serial.printf(F("%s\n"), do_external_cmd(answer, CommandBuffer, CommandIndex-1));
+      Serial.printf("%s\n", do_external_cmd(answer, CommandBuffer, CommandIndex-1));
       CommandIndex = 0;
     }
   }
@@ -2995,7 +2979,7 @@ void handle_RE_events(void)
     VFOEvent event = event_pop();
   
 #if (DEBUG & DEBUG_EVENT)
-    Serial.printf(F("handle_RE_events: event=%s\n"), event2display(event));
+    Serial.printf("handle_RE_events: event=%s\n", event2display(event));
 #endif
   
     switch (event)
