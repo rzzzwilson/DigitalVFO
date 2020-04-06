@@ -38,18 +38,17 @@
 #define DEBUG_INT     (1 << 6)  // interrupts
 #define DEBUG_DISP    (1 << 7)  // display
 #define DEBUG_BATT    (1 << 8)  // battery
-#define DEBUG_MISC    (1 << 9)  // usually just debugging
+#define DEBUG_MISC    (1 << 9)  // usually debugging
 
 // DEBUG word for debugging program - bitmask values
-#define DEBUG         (DEBUG_MISC + DEBUG_EVENT)
 //#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
-//#define DEBUG         0
+#define DEBUG         0
 //#define DEBUG         0xff
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.6";
-const char *MinorVersion = ".1";
+const char *MinorVersion = ".2";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -192,8 +191,8 @@ ULONG offset2bump[] = {1,           // offset = 0
                        10000000,    // 7
                        100000000};  // 8
 
-// string holding one entire blank row (allocated in setup())
-char *BlankRow = NULL;
+// string holding one entire blank row
+char *BlankRow = (char *) "                ";
 
 // default frequency plus LCD contrast & brightness, etc
 const ULONG DefaultFrequency = MinFreq;
@@ -222,7 +221,6 @@ enum Event
 
 // define the length of the event queue
 const int EventQueueLength = 10;
-
 
 //-----
 // Miscellaneous.
@@ -295,6 +293,8 @@ const int DefaultDClickTime = 300;    // default time
 // Code for the device will contain internal variables that aren't saved.
 //##############################################################################
 
+bool Aborted = false;       // not aborted, yet
+
 SelOffset VfoSelectDigit;   // selected column index, zero at the right
 
 // the voltage measurement calibration
@@ -341,7 +341,6 @@ void reboot(void)
 //----------------------------------------
 
 #if INIT_EEPROM != 0
-
 void initialize_eeprom()
 {
   Serial.print("Erasing EVERYTHING in EEPROM!\n");
@@ -363,7 +362,6 @@ void initialize_eeprom()
     EEPROM.put(addr, (SelOffset) 0);
   }
 }
-
 #endif
 
 //----------------------------------------
@@ -379,7 +377,7 @@ float moving_average(float new_measurement)
 
 //----------------------------------------
 // Abort the program.
-// Tries to tell the world what went wrong, then just loops.
+// Tries to tell the world what went wrong.
 //     msg  address of error string
 // Only first NumRows*NumCols chars of message is displayed on LCD.
 //----------------------------------------
@@ -389,8 +387,10 @@ void DV_abort(const char *msg)
   char buf[NumCols*NumRows+1];
   char *ptr = buf;
   
+  Aborted = true;   // set "Aborted" flag
+
   // print error on console (maybe)
-  Serial.printf("message=%s\nTeensy is paused!\n", msg);
+  Serial.printf("message=%s\nTeensy is aborted!\n", msg);
 
   // truncate/pad message to NumRows * NumCols chars
   for (int i = 0; i < NumCols*NumRows; ++i)
@@ -402,56 +402,13 @@ void DV_abort(const char *msg)
     strncpy(buf + strlen(msg), "                                ",
             NumCols*NumRows - strlen(msg));
 
-  // show what we can on the display, forever
-  while (1)
+  // show what we can on the display
+  lcd.clear();
+  for (int i = 0; i < NumRows; ++i)
   {
-    lcd.clear();
-    for (int i = 0; i < NumRows; ++i)
-    {
-      lcd.setCursor(0, i);
-      lcd.print(buf + i*NumCols);
-    }
-    delay(2000);
-
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(" ");   // padding to centre name+version
-    lcd.print(ProgramName);
-    lcd.print(" ");
-    lcd.print(Version);
-    lcd.setCursor(0, 1);
-    lcd.print("   is paused");
-    delay(2000);
+    lcd.setCursor(0, i);
+    lcd.print(buf + i*NumCols);
   }
-}
-
-//----------------------------------------
-// Dump the DEBUG word to the serial port.
-//     debug  the debug word to interpret into English
-//----------------------------------------
-
-void decode_debug_levels(int debug)
-{
-  if (debug & DEBUG_DDS)
-    Serial.printf("    DEBUG_DDS\tbit is set: %06x\n", DEBUG_DDS);
-  if (debug & DEBUG_FREQ)
-    Serial.printf("    DEBUG_FREQ\tbit is set: %06x\n", DEBUG_FREQ);
-  if (debug & DEBUG_MENU)
-    Serial.printf("    DEBUG_MENU\tbit is set: %06x\n", DEBUG_MENU);
-  if (debug & DEBUG_EVENT)
-    Serial.printf("    DEBUG_EVENT\tbit is set: %06x\n", DEBUG_EVENT);
-  if (debug & DEBUG_ACT)
-    Serial.printf("    DEBUG_ACT\tbit is set: %06x\n", DEBUG_ACT);
-  if (debug & DEBUG_RE)
-    Serial.printf("    DEBUG_RE\tbit is set: %06x\n", DEBUG_RE);
-  if (debug & DEBUG_INT)
-    Serial.printf("    DEBUG_INT\tbit is set: %06x\n", DEBUG_INT);
-  if (debug & DEBUG_DISP)
-    Serial.printf("    DEBUG_DISP\tbit is set: %06x\n", DEBUG_DISP);
-  if (debug & DEBUG_BATT)
-    Serial.printf("    DEBUG_BATT\tbit is set: %06x\n", DEBUG_BATT);
-  if (debug & DEBUG_MISC)
-    Serial.printf("    DEBUG_MISC\tbit is set: %06x\n", DEBUG_MISC);
 }
 
 //----------------------------------------
@@ -473,6 +430,42 @@ const char *event2display(VFOEvent event)
   }
   
   return "UNKNOWN EVENT";
+}
+
+const char *debug2display(int debug)
+{
+  switch (debug)
+  {
+    case DEBUG_DDS:   return "DEBUG_DDS";
+    case DEBUG_FREQ:  return "DEBUG_FREQ";
+    case DEBUG_MENU:  return "DEBUG_MENU";
+    case DEBUG_EVENT: return "DEBUG_EVENT";
+    case DEBUG_ACT:   return "DEBUG_ACT";
+    case DEBUG_RE:    return "DEBUG_RE";
+    case DEBUG_INT:   return "DEBUG_INT";
+    case DEBUG_DISP:  return "DEBUG_DISP";
+    case DEBUG_BATT:  return "DEBUG_BATT";
+    case DEBUG_MISC:  return "DEBUG_MISC";
+  }
+
+  return "UNKNOWN DEBUG";
+}
+
+//----------------------------------------
+// Dump the DEBUG word to the serial port.
+//     debug  the debug word to interpret into English
+//----------------------------------------
+
+void decode_debug_levels(int debug)
+{
+  Serial.printf("DEBUG is defined as %06x:\n", debug);
+
+  // shift a single bit left for 16 places
+  for (int bit = 1; bit <= 0xffff; bit <<= 1)
+  {
+    if (debug & bit)
+      Serial.printf("  %s\tbit is set: %06x\n", debug2display(bit), bit);
+  }
 }
 
 //----------------------------------------
@@ -1193,7 +1186,6 @@ void display_flash(void)
   }
 }
 
-
 //##############################################################################
 // The system event queue.
 // Implemented as a circular buffer.
@@ -1704,7 +1696,6 @@ void pinB_isr(void)
   }
 }
 
-
 //##############################################################################
 // Code to save/restore in EEPROM.
 //##############################################################################
@@ -1869,10 +1860,6 @@ void dds_tfr_byte(byte data)
 
 void dds_update(Frequency frequency)
 {
-//#if (DEBUG & DEBUG_DDS)
-//  Serial.printf("dds_update: frequency=%ld\n", frequency);
-//#endif
-
   // if not online, do nothing
   if (VfoMode != vfo_Online)
     return;
@@ -1904,6 +1891,7 @@ void dds_standby(void)
 #if (DEBUG & DEBUG_DDS)
   Serial.printf("DDS into standby mode.\n");
 #endif
+
   dds_update(0L);
 }
 
@@ -1916,6 +1904,7 @@ void dds_online(void)
 #if (DEBUG & DEBUG_FREQ)
   Serial.printf("DDS into online mode, frequency=%dHz.\n", VfoFrequency);
 #endif
+
   dds_update(VfoFrequency);
 }
 
@@ -1945,6 +1934,21 @@ void dds_setup(void)
 //##############################################################################
 
 //----------------------------------------
+// Show the main screen.
+// Room for 'mode', etc, display on second row
+//----------------------------------------
+
+void show_main_screen(void)
+{
+  lcd.clear();
+  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
+  lcd.print("Hz");
+
+  lcd.setCursor(0, 1);
+  lcd.write(mode2display(VfoMode));
+}
+
+//----------------------------------------
 // The standard Arduino setup() function.
 // Called once on powerup.
 //----------------------------------------
@@ -1958,12 +1962,6 @@ void setup(void)
   initialize_eeprom();  // WARNING! Destroys the EEPROM stored values
 #endif
 
-  // initialize the BlankRow global to a blank string length of a display row
-  BlankRow = (char *) malloc(NumCols + 1);
-  for (int i = 0; i < NumCols; ++i)
-    BlankRow[i] = ' ';
-  BlankRow[NumCols] = '\0';     // don't forget the string terminator
-
   // VFO wakes up in standby mode
   VfoMode = vfo_Standby;
 
@@ -1974,7 +1972,6 @@ void setup(void)
   // initialize the display
   lcd.begin(NumCols, NumRows);      // define display size
   lcd.noCursor();
-  lcd.clear();
 
   // get state back from EEPROM, set display brightness/contrast
   restore_from_eeprom();
@@ -2038,9 +2035,8 @@ void setup(void)
   
   Serial.printf("%s %s%s (%s)\n", ProgramName, Version, MinorVersion, Callsign);
   
-  // if *any* DEBUG turned on, explain state
 #if (DEBUG != 0)
-  Serial.printf("DEBUG is defined as %06X:\n", DEBUG);
+  // if *any* DEBUG turned on, explain state
   decode_debug_levels(DEBUG);
   dump_eeprom();
 #endif
@@ -2048,21 +2044,6 @@ void setup(void)
   // show the main screen and continue in loop()
   show_main_screen();
   Serial.print("Ready!\n");
-}
-
-//----------------------------------------
-// Show the main screen.
-// Room for 'mode', etc, display on second row
-//----------------------------------------
-
-void show_main_screen(void)
-{
-  lcd.clear();
-  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
-  lcd.print("Hz");
-
-  lcd.setCursor(0, 1);
-  lcd.write(mode2display(VfoMode));
 }
 
 //----------------------------------------
@@ -2985,16 +2966,20 @@ void handle_RE_events(void)
     switch (event)
     {
       case vfo_RLeft:
-        if (VfoFrequency <= MinFreq)
+        if (VfoFrequency <= MinFreq || offset2bump[VfoSelectDigit] > VfoFrequency)
           break;
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MinFreq)
           VfoFrequency = MinFreq;
+        if (VfoFrequency > MaxFreq)
+          VfoFrequency = MaxFreq;
         break;
       case vfo_RRight:
         if (VfoFrequency >= MaxFreq)
           break;
         VfoFrequency += offset2bump[VfoSelectDigit];
+        if (VfoFrequency < MinFreq)
+          VfoFrequency = MinFreq;
         if (VfoFrequency > MaxFreq)
           VfoFrequency = MaxFreq;
         break;
@@ -3031,6 +3016,10 @@ void handle_RE_events(void)
 
 void loop(void)
 {
+  // if DigitalVFO is aborted, do nothing
+  if (Aborted)
+    return;
+    
   // do any external commands
   do_external_commands();
   
