@@ -43,12 +43,11 @@
 // DEBUG word for debugging program - bitmask values
 //#define DEBUG         (DEBUG_BATT + DEBUG_ACT)
 #define DEBUG         0
-//#define DEBUG         0xff
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.6";
-const char *MinorVersion = ".2";
+const char *MinorVersion = ".3";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -70,7 +69,7 @@ enum Mode
 
 enum Mode VfoMode;          // VFO mode
 
-typedef ULONG Frequency;
+typedef long Frequency;
 Frequency VfoFrequency;     // VFO frequency (Hz)
 
 typedef int SelOffset;
@@ -129,8 +128,8 @@ const int EepromSaveOffsetBase = EepromSaveFreqBase + NumSaveSlots*sizeof(Freque
 //-----
 
 // max and min frequency showable
-const ULONG MaxFreq = 60000000L;
-const ULONG MinFreq = 1000000L;
+const Frequency MaxFreq = 60000000L;
+const Frequency MinFreq = 1000000L;
 
 // number of digits in the frequency display
 const int NumFreqChars = 8;
@@ -181,21 +180,21 @@ byte battnone[8]  = {0x04,0x06,0x0d,0x15,0x14,0x10,0x00,0x00}; // a USB logo (so
 byte *batt_syms[] = {battunder, batt00, batt20, batt40, batt60, batt80, batt100, battover, battnone};
 
 // map select_offset to frequency bump values
-ULONG offset2bump[] = {1,           // offset = 0
-                       10,          // 1
-                       100,         // 2
-                       1000,        // 3
-                       10000,       // 4
-                       100000,      // 5
-                       1000000,     // 6
-                       10000000,    // 7
-                       100000000};  // 8
+Frequency offset2bump[] = {1,           // offset = 0
+                           10,          // 1
+                           100,         // 2
+                           1000,        // 3
+                           10000,       // 4
+                           100000,      // 5
+                           1000000,     // 6
+                           10000000,    // 7
+                           100000000};  // 8
 
 // string holding one entire blank row
 char *BlankRow = (char *) "                ";
 
 // default frequency plus LCD contrast & brightness, etc
-const ULONG DefaultFrequency = MinFreq;
+const Frequency DefaultFrequency = MinFreq;
 const int DefaultVfoClockOffset = 0;
 const UINT DefaultSelDigit = 2;
 const UINT DefaultLcdContrast = 0;
@@ -521,7 +520,7 @@ void fade_out(void)
 }
 
 //----------------------------------------
-// Function to convert an unsigned long into an array of byte digit values.
+// Function to convert a long integer into an array of byte digit values.
 //     buf      address of buffer for byte results
 //     bufsize  size of the 'buf' buffer
 //     value    the Frequency value to convert
@@ -533,7 +532,7 @@ void fade_out(void)
 // The resultant buffer does NOT have a terminating '\0'!
 //----------------------------------------
 
-void ulong2buff(char *buf, int bufsize, ULONG value)
+void ulong2buff(char *buf, int bufsize, long value)
 {
   char *ptr = buf + bufsize - 1;    // rightmost char in 'buf'
 
@@ -1378,7 +1377,7 @@ void display_battery(void)
 // list of row 0 column positions for the display digits
 //int freq_digit_offset[] = {4, 5, 7, 8, 9, 11, 12, 13};
 
-void display_sel_value(ULONG value, int sel_col, int num_digits, int col, int row)
+void display_sel_value(long value, int sel_col, int num_digits, int col, int row)
 {
   char buf [num_digits];
   int index = num_digits - sel_col - 1;
@@ -1794,7 +1793,7 @@ void dump_eeprom(void)
   Serial.printf("dump_eeprom:\n");
   Serial.printf("offset size  value\n");
   Serial.printf("------ ----  -----\n");
-  Serial.printf("   %3d  (%d)  VfoFrequency=%ld\n", EepromFreq, sizeof(Frequency), freq);
+  Serial.printf("   %3d  (%d)  VfoFrequency=%ld\n", EepromFreq, sizeof(VfoFrequency), freq);
   Serial.printf("   %3d  (%d)  EepromSelDigit=%d\n", EepromSelDigit, sizeof(SelOffset), offset);
   Serial.printf("   %3d  (%d)  VfoClockOffset=%d\n", EepromVfoClockOffset, sizeof(VfoClockOffset), clkoffset);
   Serial.printf("   %3d  (%d)  LcdContrast=%d\n", EepromContrast, sizeof(LcdContrast), contrast);
@@ -1866,6 +1865,7 @@ void dds_update(Frequency frequency)
     
   // as in datasheet page 12 - modified to include calibration offset
   ULONG data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
+  //                        ^^^^^^^^^^ == 2**32
 
 #if (DEBUG & DEBUG_DDS)
   Serial.printf("dds_update: ONLINE: frequency=%ld, VfoClockOffset=%d, data=%ld\n",
@@ -2966,20 +2966,12 @@ void handle_RE_events(void)
     switch (event)
     {
       case vfo_RLeft:
-        if (VfoFrequency <= MinFreq || offset2bump[VfoSelectDigit] > VfoFrequency)
-          break;
         VfoFrequency -= offset2bump[VfoSelectDigit];
         if (VfoFrequency < MinFreq)
           VfoFrequency = MinFreq;
-        if (VfoFrequency > MaxFreq)
-          VfoFrequency = MaxFreq;
         break;
       case vfo_RRight:
-        if (VfoFrequency >= MaxFreq)
-          break;
         VfoFrequency += offset2bump[VfoSelectDigit];
-        if (VfoFrequency < MinFreq)
-          VfoFrequency = MinFreq;
         if (VfoFrequency > MaxFreq)
           VfoFrequency = MaxFreq;
         break;
@@ -2994,9 +2986,10 @@ void handle_RE_events(void)
           VfoSelectDigit = 0;
         break;
       case vfo_Click:
+        // do nothing on click
         break;
       case vfo_HoldClick:
-        menu_show(&menu_main, 0);    // redisplay the original menu
+        menu_show(&menu_main, 0);    // redisplay the original menu, if any
         show_main_screen();
         save_to_eeprom();            // save any changes made in menu
         break;
