@@ -46,13 +46,13 @@
 
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
-const char *Version = "1.6";
-const char *MinorVersion = ".3";
+const char *Version = "1.7";
+const char *MinorVersion = ".0";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
-const int NumRows = 2;
-const int NumCols = 16;
+const int LcdNumRows = 2;
+const int LcdNumCols = 16;
 
 //-----
 // Some convenience typedefs
@@ -311,6 +311,25 @@ int VfoClockOffset = DefaultVfoClockOffset;
 byte *BatterySymbol = battunder;
 
 //##############################################################################
+// RE internal variables.
+//##############################################################################
+
+// internal variables
+UINT ReHoldClickTime = DefaultHoldClickTime;
+UINT ReDClickTime = DefaultDClickTime;
+
+bool re_rotation = false;     // true if rotation occurred while knob down
+bool re_down = false;         // true while knob is down
+ULONG re_down_time = 0;       // milliseconds when knob is pressed down
+ULONG last_click = 0;         // time when last single click was found
+
+// expecting rising edge on pinA - at detent
+volatile byte aFlag = 0;
+
+// expecting rising edge on pinA - at detent
+volatile byte bFlag = 0;
+
+//##############################################################################
 // Utility routines
 //##############################################################################
 
@@ -378,12 +397,12 @@ float moving_average(float new_measurement)
 // Abort the program.
 // Tries to tell the world what went wrong.
 //     msg  address of error string
-// Only first NumRows*NumCols chars of message is displayed on LCD.
+// Only first LcdNumRows*LcdNumCols chars of message is displayed on LCD.
 //----------------------------------------
 
 void DV_abort(const char *msg)
 {
-  char buf[NumCols*NumRows+1];
+  char buf[LcdNumCols*LcdNumRows+1];
   char *ptr = buf;
   
   Aborted = true;   // set "Aborted" flag
@@ -391,22 +410,22 @@ void DV_abort(const char *msg)
   // print error on console (maybe)
   Serial.printf("message=%s\nTeensy is aborted!\n", msg);
 
-  // truncate/pad message to NumRows * NumCols chars
-  for (int i = 0; i < NumCols*NumRows; ++i)
+  // truncate/pad message to LcdNumRows * LcdNumCols chars
+  for (int i = 0; i < LcdNumCols*LcdNumRows; ++i)
     *ptr++ = ' ';
   *ptr = '\0';
   
-  strncpy(buf, msg, NumCols*NumRows);
-  if (strlen(msg) < NumCols*NumRows)
+  strncpy(buf, msg, LcdNumCols*LcdNumRows);
+  if (strlen(msg) < LcdNumCols*LcdNumRows)
     strncpy(buf + strlen(msg), "                                ",
-            NumCols*NumRows - strlen(msg));
+            LcdNumCols*LcdNumRows - strlen(msg));
 
   // show what we can on the display
   lcd.clear();
-  for (int i = 0; i < NumRows; ++i)
+  for (int i = 0; i < LcdNumRows; ++i)
   {
     lcd.setCursor(0, i);
-    lcd.print(buf + i*NumCols);
+    lcd.print(buf + i*LcdNumCols);
   }
 }
 
@@ -482,7 +501,7 @@ void show_credits(bool minor)
   {
     lcd.print(MinorVersion);
   }
-  lcd.setCursor(NumCols-strlen(Callsign), 1);
+  lcd.setCursor(LcdNumCols-strlen(Callsign), 1);
   lcd.print(Callsign);
 }
 
@@ -572,6 +591,240 @@ void str2upper(char *str)
     ++str;
   }
 }
+
+//##############################################################################
+// Code to save/restore in EEPROM.
+//##############################################################################
+
+//----------------------------------------
+// Save VFO state to EEPROM.
+// Everything except slot data.
+//----------------------------------------
+
+void save_to_eeprom(void)
+{
+  EEPROM.put(EepromFreq, VfoFrequency);
+  EEPROM.put(EepromSelDigit, VfoSelectDigit);
+  EEPROM.put(EepromVfoClockOffset, VfoClockOffset);
+  EEPROM.put(EepromBrightness, LcdBrightness);
+  EEPROM.put(EepromContrast, LcdContrast);
+  EEPROM.put(EepromHoldClickTime, ReHoldClickTime);
+  EEPROM.put(EepromDClickTime, ReDClickTime);
+  EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
+}
+
+//----------------------------------------
+// Restore VFO state from EEPROM.
+// Everything except slot data.
+//----------------------------------------
+
+void restore_from_eeprom(void)
+{
+  EEPROM.get(EepromFreq, VfoFrequency);
+  EEPROM.get(EepromSelDigit, VfoSelectDigit);
+  EEPROM.get(EepromVfoClockOffset, VfoClockOffset);
+  EEPROM.get(EepromBrightness, LcdBrightness);
+  EEPROM.get(EepromContrast, LcdContrast);
+  EEPROM.get(EepromHoldClickTime, ReHoldClickTime);
+  EEPROM.get(EepromDClickTime, ReDClickTime);
+  EEPROM.get(EepromVoltsCalibrate, VoltsCalibrate);
+}
+
+//----------------------------------------
+// Given slot number, return freq/offset.
+//     freq    pointer to Frequency item to be updated
+//     offset  pointer to selection offset item to be updated
+//----------------------------------------
+
+void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
+{
+  int freq_address = EepromSaveFreqBase + slot_num * sizeof(Frequency);
+  int offset_address = EepromSaveOffsetBase + slot_num * sizeof(SelOffset);
+
+  EEPROM.get(freq_address, freq);
+  EEPROM.get(offset_address, offset);
+}
+
+//----------------------------------------
+// Put frequency/offset into given slot number.
+//     freq    pointer to Frequency item to be saved in slot
+//     offset  pointer to selection offset item to be saved in slot
+//----------------------------------------
+
+void put_slot(int slot_num, Frequency freq, SelOffset offset)
+{
+  int freq_address = EepromSaveFreqBase + slot_num * sizeof(Frequency);
+  int offset_address = EepromSaveOffsetBase + slot_num * sizeof(SelOffset);
+
+  EEPROM.put(freq_address, freq);
+  EEPROM.put(offset_address, offset);
+}
+
+//----------------------------------------
+// Print all EEPROM saved data to console.
+//----------------------------------------
+
+#define DELAY_MS 100  // not sure why we need a delay to print reliably
+
+void dump_eeprom(void)
+{
+  Frequency freq;
+  SelOffset offset;
+  int clkoffset;
+  int brightness;
+  int contrast;
+  UINT hold;
+  UINT dclick;
+  UINT volt_calib;
+
+  EEPROM.get(EepromFreq, freq);
+  EEPROM.get(EepromSelDigit, offset);
+  EEPROM.get(EepromVfoClockOffset, clkoffset);
+  EEPROM.get(EepromContrast, contrast);
+  EEPROM.get(EepromBrightness, brightness);
+  EEPROM.get(EepromHoldClickTime, hold);
+  EEPROM.get(EepromDClickTime, dclick);
+  EEPROM.get(EepromVoltsCalibrate, volt_calib);
+  
+  Serial.printf("=================================================\n");
+  Serial.printf("dump_eeprom:\n");
+  Serial.printf("offset size  value\n");
+  Serial.printf("------ ----  -----\n");
+  Serial.printf("   %3d  (%d)  VfoFrequency=%ld\n", EepromFreq, sizeof(VfoFrequency), freq);
+  Serial.printf("   %3d  (%d)  EepromSelDigit=%d\n", EepromSelDigit, sizeof(SelOffset), offset);
+  Serial.printf("   %3d  (%d)  VfoClockOffset=%d\n", EepromVfoClockOffset, sizeof(VfoClockOffset), clkoffset);
+  Serial.printf("   %3d  (%d)  LcdContrast=%d\n", EepromContrast, sizeof(LcdContrast), contrast);
+  Serial.printf("   %3d  (%d)  LcdBrightness=%d\n", EepromBrightness, sizeof(LcdBrightness), brightness);
+  Serial.printf("   %3d  (%d)  ReHoldClickTime=%dmsec\n", EepromHoldClickTime, sizeof(ReHoldClickTime), hold);
+  Serial.printf("   %3d  (%d)  ReDClickTime=%dmsec\n", EepromDClickTime, sizeof(ReDClickTime), dclick);
+  Serial.printf("   %3d  (%d)  VoltsCalibrate=%d\n", EepromVoltsCalibrate, sizeof(VoltsCalibrate), volt_calib);
+
+  delay(DELAY_MS);
+
+  for (int i = 0; i < NumSaveSlots; ++i)
+  {
+    get_slot(i, freq, offset);
+    Serial.printf("Slot %d: freq=%ld, seldig=%d\n", i, freq, offset);
+    delay(DELAY_MS);
+  }
+
+  Serial.printf("=================================================\n");
+}
+
+//##############################################################################
+// Code to handle the DDS-60
+//
+// From: http://www.rocketnumbernine.com/2011/10/25/programming-the-ad9851-dds-synthesizer
+// Andrew Smallbone <andrew@rocketnumbernine.com>
+//
+// I've touched this a little bit, so any errors are mine!
+//##############################################################################
+
+//----------------------------------------
+// Pulse 'pin' high and then low very quickly.
+//----------------------------------------
+
+void dds_pulse_high(byte pin)
+{
+  digitalWrite(pin, HIGH);
+  digitalWrite(pin, LOW);
+}
+
+//----------------------------------------
+// Transfer a 'data' byte a bit at a time, LSB first, to DDS_DATA pin.
+//----------------------------------------
+
+void dds_tfr_byte(byte data)
+{
+  for (int i = 0; i < 8; ++i, data >>= 1)
+  {
+    digitalWrite(DDS_DATA, data & 0x01);
+    dds_pulse_high(DDS_W_CLK);
+  }
+}
+
+//----------------------------------------
+// Set the DDS-60 output frequency.
+//
+// Only set if VFO is online.
+//
+// Frequency of sinewave (datasheet page 12) will be
+// "<sys clock> * <frequency tuning word> / 2^32".
+// Rearranging: FTW = (frequency * 2^32) / sys_clock.
+// The 'VfoClockOffset' value is subtracted from <sys_clock> below.
+//----------------------------------------
+
+void dds_update(Frequency frequency)
+{
+  // if not online, do nothing
+  if (VfoMode != vfo_Online)
+    return;
+    
+  // as in datasheet page 12 - modified to include calibration offset
+  ULONG data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
+  //                        ^^^^^^^^^^ == 2**32
+
+#if (DEBUG & DEBUG_DDS)
+  Serial.printf("dds_update: ONLINE: frequency=%ld, VfoClockOffset=%d, data=%ld\n",
+                frequency, VfoClockOffset, data);
+#endif
+
+  // start programming the DDS-60
+  for (int b = 0; b < 4; ++b, data >>= 8)
+  {
+    dds_tfr_byte(data & 0xFF);
+  }
+  dds_tfr_byte(0x001);
+  dds_pulse_high(DDS_FQ_UD);
+}
+
+//----------------------------------------
+// Force the DDS into standby mode.
+// There is a standby bit in the control word, but setting frequency to zero works.
+//----------------------------------------
+
+void dds_standby(void)
+{
+#if (DEBUG & DEBUG_DDS)
+  Serial.printf("DDS into standby mode.\n");
+#endif
+
+  dds_update(0L);
+}
+
+//----------------------------------------
+// Force the DDS into online mode.
+//----------------------------------------
+
+void dds_online(void)
+{
+#if (DEBUG & DEBUG_FREQ)
+  Serial.printf("DDS into online mode, frequency=%dHz.\n", VfoFrequency);
+#endif
+
+  dds_update(VfoFrequency);
+}
+
+//----------------------------------------
+// Initialize the DDS hardware.
+// The VFO 'wakes up' in standby mode.
+//----------------------------------------
+
+void dds_setup(void)
+{
+  // all pins to outputs
+  pinMode(DDS_FQ_UD, OUTPUT);
+  pinMode(DDS_W_CLK, OUTPUT);
+  pinMode(DDS_DATA, OUTPUT);
+
+  // set serial load enable (Datasheet page 15 Fig. 17) 
+  dds_pulse_high(DDS_W_CLK);
+  dds_pulse_high(DDS_FQ_UD);
+
+  // go into standby
+  dds_standby();
+}
+
 
 //----------------------------------------
 // Display the VFO mode on the screen..
@@ -883,7 +1136,7 @@ const char * xcmd_freq(char *answer, char *cmd)
           return "ERROR";
         VfoFrequency = tmp_freq;
         display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars,
-                          NumCols - NumFreqChars - 2, 0);
+                          LcdNumCols - NumFreqChars - 2 - 2, 0);
         return "OK";
       }
   }
@@ -1069,7 +1322,7 @@ void menuitem_draw(struct Menu *menu, int item_num)
   // write indexed item on lower row, right-justified
   lcd.setCursor(0, 1);
   lcd.print(BlankRow);
-  lcd.setCursor(NumCols - max_len, 1);
+  lcd.setCursor(LcdNumCols - max_len, 1);
   lcd.print(menu->items[item_num]->title);
 }
 
@@ -1366,21 +1619,20 @@ void display_battery(void)
 
 //----------------------------------------
 // Display a value on the display with selected column underlined.
-//     value       the number to show
+//     value       the integer number to show
 //     sel_col     the selection offset of digit to underline
 //                 (0 is rightmost digit, increasing to the left)
 //     num_digits  the number of digits to show on the display
 //     col, row    position to display left-most digit at
 // If the value is too long it will be truncated at the left.
+// This routine inserts a comma every three columns.
 //----------------------------------------
-
-// list of row 0 column positions for the display digits
-//int freq_digit_offset[] = {4, 5, 7, 8, 9, 11, 12, 13};
 
 void display_sel_value(long value, int sel_col, int num_digits, int col, int row)
 {
   char buf [num_digits];
   int index = num_digits - sel_col - 1;
+  int comma_count = 3 - (num_digits % 3);  // columns to next comma
 
 #if (DEBUG & DEBUG_DISPLAY)
   Serial.printf("display_sel_value: value=%ld, sel_col=%d, num_digits=%d, col=%d, row=%d",
@@ -1397,7 +1649,7 @@ void display_sel_value(long value, int sel_col, int num_digits, int col, int row
   // would prefer to set cursor position outside this function, but ไม่เป็นไร.
   lcd.setCursor(col, row);
 
-  // write each byte of buffer to display, handling leading spaces and selection
+  // write each byte of buffer to display, handling leading spaces, selection & commas
   bool lead_zero = true;
   for (int i = 0; i < num_digits; ++i)
   {
@@ -1428,8 +1680,21 @@ void display_sel_value(long value, int sel_col, int num_digits, int col, int row
         lcd.write(char_val + '0');
       }
     }
+    if (++comma_count >= 3)
+    {
+      if (i < num_digits - 1)
+      {
+        if (!lead_zero)
+          lcd.write(",");
+        else
+          lcd.write(" ");
+      }
+      
+      comma_count = 0;
+    }
   }
 }
+
 
 //----------------------------------------
 // Display an integer with sign on the display with selected column underlined.
@@ -1510,21 +1775,6 @@ void display_sel_offset(int value, int sel_col, int num_digits, int col, int row
 // Interrupt driven rotary encoder interface.  From code by Simon Merrett.
 // Based on insight from Oleg Mazurov, Nick Gammon, rt, Steve Spence.
 //##############################################################################
-
-// internal variables
-UINT ReHoldClickTime = DefaultHoldClickTime;
-UINT ReDClickTime = DefaultDClickTime;
-
-bool re_rotation = false;     // true if rotation occurred while knob down
-bool re_down = false;         // true while knob is down
-ULONG re_down_time = 0;       // milliseconds when knob is pressed down
-ULONG last_click = 0;         // time when last single click was found
-
-// expecting rising edge on pinA - at detent
-volatile byte aFlag = 0;
-
-// expecting rising edge on pinA - at detent
-volatile byte bFlag = 0;
 
 //----------------------------------------
 // Initialize the rotary encoder stuff.
@@ -1696,240 +1946,6 @@ void pinB_isr(void)
 }
 
 //##############################################################################
-// Code to save/restore in EEPROM.
-//##############################################################################
-
-//----------------------------------------
-// Save VFO state to EEPROM.
-// Everything except slot data.
-//----------------------------------------
-
-void save_to_eeprom(void)
-{
-  EEPROM.put(EepromFreq, VfoFrequency);
-  EEPROM.put(EepromSelDigit, VfoSelectDigit);
-  EEPROM.put(EepromVfoClockOffset, VfoClockOffset);
-  EEPROM.put(EepromBrightness, LcdBrightness);
-  EEPROM.put(EepromContrast, LcdContrast);
-  EEPROM.put(EepromHoldClickTime, ReHoldClickTime);
-  EEPROM.put(EepromDClickTime, ReDClickTime);
-  EEPROM.put(EepromVoltsCalibrate, VoltsCalibrate);
-}
-
-//----------------------------------------
-// Restore VFO state from EEPROM.
-// Everything except slot data.
-//----------------------------------------
-
-void restore_from_eeprom(void)
-{
-  EEPROM.get(EepromFreq, VfoFrequency);
-  EEPROM.get(EepromSelDigit, VfoSelectDigit);
-  EEPROM.get(EepromVfoClockOffset, VfoClockOffset);
-  EEPROM.get(EepromBrightness, LcdBrightness);
-  EEPROM.get(EepromContrast, LcdContrast);
-  EEPROM.get(EepromHoldClickTime, ReHoldClickTime);
-  EEPROM.get(EepromDClickTime, ReDClickTime);
-  EEPROM.get(EepromVoltsCalibrate, VoltsCalibrate);
-}
-
-//----------------------------------------
-// Given slot number, return freq/offset.
-//     freq    pointer to Frequency item to be updated
-//     offset  pointer to selection offset item to be updated
-//----------------------------------------
-
-void get_slot(int slot_num, Frequency &freq, SelOffset &offset)
-{
-  int freq_address = EepromSaveFreqBase + slot_num * sizeof(Frequency);
-  int offset_address = EepromSaveOffsetBase + slot_num * sizeof(SelOffset);
-
-  EEPROM.get(freq_address, freq);
-  EEPROM.get(offset_address, offset);
-}
-
-//----------------------------------------
-// Put frequency/offset into given slot number.
-//     freq    pointer to Frequency item to be saved in slot
-//     offset  pointer to selection offset item to be saved in slot
-//----------------------------------------
-
-void put_slot(int slot_num, Frequency freq, SelOffset offset)
-{
-  int freq_address = EepromSaveFreqBase + slot_num * sizeof(Frequency);
-  int offset_address = EepromSaveOffsetBase + slot_num * sizeof(SelOffset);
-
-  EEPROM.put(freq_address, freq);
-  EEPROM.put(offset_address, offset);
-}
-
-//----------------------------------------
-// Print all EEPROM saved data to console.
-//----------------------------------------
-
-#define DELAY_MS 100  // not sure why we need a delay to print reliably
-
-void dump_eeprom(void)
-{
-  Frequency freq;
-  SelOffset offset;
-  int clkoffset;
-  int brightness;
-  int contrast;
-  UINT hold;
-  UINT dclick;
-  UINT volt_calib;
-
-  EEPROM.get(EepromFreq, freq);
-  EEPROM.get(EepromSelDigit, offset);
-  EEPROM.get(EepromVfoClockOffset, clkoffset);
-  EEPROM.get(EepromContrast, contrast);
-  EEPROM.get(EepromBrightness, brightness);
-  EEPROM.get(EepromHoldClickTime, hold);
-  EEPROM.get(EepromDClickTime, dclick);
-  EEPROM.get(EepromVoltsCalibrate, volt_calib);
-  
-  Serial.printf("=================================================\n");
-  Serial.printf("dump_eeprom:\n");
-  Serial.printf("offset size  value\n");
-  Serial.printf("------ ----  -----\n");
-  Serial.printf("   %3d  (%d)  VfoFrequency=%ld\n", EepromFreq, sizeof(VfoFrequency), freq);
-  Serial.printf("   %3d  (%d)  EepromSelDigit=%d\n", EepromSelDigit, sizeof(SelOffset), offset);
-  Serial.printf("   %3d  (%d)  VfoClockOffset=%d\n", EepromVfoClockOffset, sizeof(VfoClockOffset), clkoffset);
-  Serial.printf("   %3d  (%d)  LcdContrast=%d\n", EepromContrast, sizeof(LcdContrast), contrast);
-  Serial.printf("   %3d  (%d)  LcdBrightness=%d\n", EepromBrightness, sizeof(LcdBrightness), brightness);
-  Serial.printf("   %3d  (%d)  ReHoldClickTime=%dmsec\n", EepromHoldClickTime, sizeof(ReHoldClickTime), hold);
-  Serial.printf("   %3d  (%d)  ReDClickTime=%dmsec\n", EepromDClickTime, sizeof(ReDClickTime), dclick);
-  Serial.printf("   %3d  (%d)  VoltsCalibrate=%d\n", EepromVoltsCalibrate, sizeof(VoltsCalibrate), volt_calib);
-
-  delay(DELAY_MS);
-
-  for (int i = 0; i < NumSaveSlots; ++i)
-  {
-    get_slot(i, freq, offset);
-    Serial.printf("Slot %d: freq=%ld, seldig=%d\n", i, freq, offset);
-    delay(DELAY_MS);
-  }
-
-  Serial.printf("=================================================\n");
-}
-
-//##############################################################################
-// Code to handle the DDS-60
-//
-// From: http://www.rocketnumbernine.com/2011/10/25/programming-the-ad9851-dds-synthesizer
-// Andrew Smallbone <andrew@rocketnumbernine.com>
-//
-// I've touched this a little bit, so any errors are mine!
-//##############################################################################
-
-//----------------------------------------
-// Pulse 'pin' high and then low very quickly.
-//----------------------------------------
-
-void dds_pulse_high(byte pin)
-{
-  digitalWrite(pin, HIGH);
-  digitalWrite(pin, LOW);
-}
-
-//----------------------------------------
-// Transfer a 'data' byte a bit at a time, LSB first, to DDS_DATA pin.
-//----------------------------------------
-
-void dds_tfr_byte(byte data)
-{
-  for (int i = 0; i < 8; ++i, data >>= 1)
-  {
-    digitalWrite(DDS_DATA, data & 0x01);
-    dds_pulse_high(DDS_W_CLK);
-  }
-}
-
-//----------------------------------------
-// Set the DDS-60 output frequency.
-//
-// Only set if VFO is online.
-//
-// Frequency of sinewave (datasheet page 12) will be
-// "<sys clock> * <frequency tuning word> / 2^32".
-// Rearranging: FTW = (frequency * 2^32) / sys_clock.
-// The 'VfoClockOffset' value is subtracted from <sys_clock> below.
-//----------------------------------------
-
-void dds_update(Frequency frequency)
-{
-  // if not online, do nothing
-  if (VfoMode != vfo_Online)
-    return;
-    
-  // as in datasheet page 12 - modified to include calibration offset
-  ULONG data = (frequency * 4294967296) / (180000000 - VfoClockOffset);
-  //                        ^^^^^^^^^^ == 2**32
-
-#if (DEBUG & DEBUG_DDS)
-  Serial.printf("dds_update: ONLINE: frequency=%ld, VfoClockOffset=%d, data=%ld\n",
-                frequency, VfoClockOffset, data);
-#endif
-
-  // start programming the DDS-60
-  for (int b = 0; b < 4; ++b, data >>= 8)
-  {
-    dds_tfr_byte(data & 0xFF);
-  }
-  dds_tfr_byte(0x001);
-  dds_pulse_high(DDS_FQ_UD);
-}
-
-//----------------------------------------
-// Force the DDS into standby mode.
-// There is a standby bit in the control word, but setting frequency to zero works.
-//----------------------------------------
-
-void dds_standby(void)
-{
-#if (DEBUG & DEBUG_DDS)
-  Serial.printf("DDS into standby mode.\n");
-#endif
-
-  dds_update(0L);
-}
-
-//----------------------------------------
-// Force the DDS into online mode.
-//----------------------------------------
-
-void dds_online(void)
-{
-#if (DEBUG & DEBUG_FREQ)
-  Serial.printf("DDS into online mode, frequency=%dHz.\n", VfoFrequency);
-#endif
-
-  dds_update(VfoFrequency);
-}
-
-//----------------------------------------
-// Initialize the DDS hardware.
-// The VFO 'wakes up' in standby mode.
-//----------------------------------------
-
-void dds_setup(void)
-{
-  // all pins to outputs
-  pinMode(DDS_FQ_UD, OUTPUT);
-  pinMode(DDS_W_CLK, OUTPUT);
-  pinMode(DDS_DATA, OUTPUT);
-
-  // set serial load enable (Datasheet page 15 Fig. 17) 
-  dds_pulse_high(DDS_W_CLK);
-  dds_pulse_high(DDS_FQ_UD);
-
-  // go into standby
-  dds_standby();
-}
-
-
-//##############################################################################
 // Main VFO code
 //##############################################################################
 
@@ -1941,7 +1957,7 @@ void dds_setup(void)
 void show_main_screen(void)
 {
   lcd.clear();
-  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
+  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, LcdNumCols - NumFreqChars - 2 - 2, 0);
   lcd.print("Hz");
 
   lcd.setCursor(0, 1);
@@ -1970,7 +1986,7 @@ void setup(void)
   pinMode(mc_Contrast, OUTPUT);
 
   // initialize the display
-  lcd.begin(NumCols, NumRows);      // define display size
+  lcd.begin(LcdNumCols, LcdNumRows);      // define display size
   lcd.noCursor();
 
   // get state back from EEPROM, set display brightness/contrast
@@ -2063,10 +2079,10 @@ void show_slot_frequency(int slot_num)
     lcd.setCursor(0, 1);
     lcd.write(byte(InUseChar));
   }
-  lcd.setCursor(4, 1);
+  lcd.setCursor(2, 1);
   lcd.write(slot_num + '0');
   lcd.print(":");
-  display_sel_value(freq, -1, NumFreqChars, NumCols - NumFreqChars - 2, 1);
+  display_sel_value(freq, -1, NumFreqChars, LcdNumCols - NumFreqChars - 2 - 2, 1);
   lcd.print("Hz");
 }
 
@@ -3023,7 +3039,7 @@ void loop(void)
   measure_battery();
   
   // update the display
-  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, NumCols - NumFreqChars - 2, 0);
+  display_sel_value(VfoFrequency, VfoSelectDigit, NumFreqChars, LcdNumCols - NumFreqChars - 2 - 2, 0);
   display_battery();
 
   // if online, update DDS-60 and write changes to EEPROM
