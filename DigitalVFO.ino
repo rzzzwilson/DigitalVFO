@@ -47,7 +47,7 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.7";
-const char *MinorVersion = ".0";
+const char *MinorVersion = ".1";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -3026,6 +3026,7 @@ void handle_RE_events(void)
 void loop(void)
 {
   // if DigitalVFO is aborted, do nothing
+  // We used to just loop in abort(), but this made reboots difficult
   if (Aborted)
     return;
     
