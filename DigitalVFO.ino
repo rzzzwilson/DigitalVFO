@@ -47,7 +47,7 @@
 // Digital VFO program name & version
 const char *ProgramName = "DigitalVFO";
 const char *Version = "1.7";
-const char *MinorVersion = ".1";
+const char *MinorVersion = ".2";
 const char *Callsign = "ac3dn";
 
 // display constants - below is for ubiquitous small HD44780 16x2 display
@@ -250,8 +250,8 @@ const int MaxClockOffset = +32000;
 const int MaxOffsetDigits = 5;
 
 // battery voltage limits
-const float OverVoltage = 7.90;   // battery voltage for CHARGING & FULL
-const float MaxVoltage = 7.80;    // battery voltage for "100% full"
+const float OverVoltage = 8.30;   // battery voltage for CHARGING & FULL
+const float MaxVoltage = 7.90;    // battery voltage for "100% full"
 const float MinVoltage = 6.50;    // battery voltage for "0% full"
                                   // BMS disconnects at around 6.40v
 const float NoBattVoltage = 5.5;  // if at or below this, no battery
